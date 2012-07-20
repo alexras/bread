@@ -17,10 +17,10 @@ test = TestStruct()
 
 test.load(data)
 
-print test.first
-print test.second
-print test.third
-print test.fourth
+assert test.first == 32
+assert test.second == -57
+assert test.third == 90
+assert test.fourth == 0
 
 data2 = struct.pack(">IqQb", 3, 24, 999999, 1)
 
@@ -28,7 +28,7 @@ test2 = TestStruct()
 
 test2.load(data2)
 
-print test2.first
-print test2.second
-print test2.third
-print test2.fourth
+assert test2.first == 3
+assert test2.second == 24
+assert test2.third == 999999
+assert test2.fourth == 1

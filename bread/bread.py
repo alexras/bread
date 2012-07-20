@@ -13,34 +13,17 @@ class Field(object):
 
     creation_counter = 0
 
-    def __init__(self, length, struct_conversion):
-        self.data = None
-        self.length = length
-        self.struct_conversion = struct_conversion
-
+    def __init__(self, length):
         self.creation_counter = Field.creation_counter
+        self.length = length
+
         Field.creation_counter += 1
 
-    def load(self, data_source, offset):
-        if type(data_source) == file:
-            self.data = data_source.read(self.length)
-        elif type(data_source) == str:
-            self.data = data_source[offset:offset + self.length]
+    def load(self, data, **kwargs):
+        raise NotImplementedError("All fields must implement load()")
 
+    def __len__(self):
         return self.length
-
-    def unpack(self):
-        return struct.unpack(self.struct_conversion, self.data)
-
-class FieldDescriptor(object):
-    def __init__(self, field_name):
-        self.field_name = "_bread_field_" + field_name
-
-    def __get__(self, instance, owner):
-        return getattr(instance, self.field_name).unpack()
-
-    def __set__(self, value):
-        raise AttributeError
 
 class Struct(object):
     endianness = little_endian
@@ -80,18 +63,21 @@ class Struct(object):
 
         return obj
 
-    def __getattr__(self, name):
-        if name not in self._bread_field_order:
-            raise AttributeError
-
-        return object.__getattribute__(self, "_bread_field_" + name).unpack(
-            endianness = self._bread_endianness)
-
     def load(self, data_source):
         amt_loaded = 0
-        for field in self._bread_field_order:
-            amt_loaded += getattr(self, "_bread_field_" + field).load(
-                data_source, amt_loaded)
+        for field_name in self._bread_field_order:
+            field = getattr(self, "_bread_field_" + field_name)
+
+            if type(data_source) == file:
+                data = fp.read(len(field))
+            elif type(data_source) == str:
+                data = data_source[amt_loaded:amt_loaded + len(field)]
+
+            field_val = field.load(
+                data, endianness = self._bread_endianness)
+            amt_loaded += len(field)
+
+            setattr(self, field_name, field_val)
 
 # Mapping from (length, signed) pairs to struct symbols
 STRUCT_CONVERSION_SYMBOLS = {
@@ -106,7 +92,7 @@ STRUCT_CONVERSION_SYMBOLS = {
     }
 
 class Integer(Field):
-    def unpack(self, **kwargs):
+    def load(self, data, **kwargs):
         conversion = ''
 
         if "endianness" in kwargs:
@@ -115,19 +101,15 @@ class Integer(Field):
             elif kwargs["endianness"] == big_endian:
                 conversion = ">"
 
-        old_conversion = self.struct_conversion
-        self.struct_conversion = conversion + self.struct_conversion
+        conversion += self.struct_conversion
 
-        int_to_return = super(Integer, self).unpack()[0]
-
-        self.struct_conversion = old_conversion
-
-        return int_to_return
+        return struct.unpack(conversion, data)[0]
 
     def __init__(self, length, signed):
         self.struct_conversion = STRUCT_CONVERSION_SYMBOLS[(length, signed)]
+        self.length = length
 
-        super(Integer, self).__init__(length, self.struct_conversion)
+        super(Integer, self).__init__(length)
 
 class Int8(Integer):
     def __init__(self):
@@ -161,3 +143,9 @@ class UInt64(Integer):
     def __init__(self):
         super(UInt64, self).__init__(8, False)
 
+class String(Field):
+    def __init__(self, length):
+        super(String, self).__init__(length)
+
+    def load(self, data):
+        return struct.unpack("%ds", self.length)
