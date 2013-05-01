@@ -6,6 +6,8 @@ import struct, copy
 little_endian = 0
 big_endian = 1
 
+HIDDEN_FIELD_PREFIX = '_bread_field_'
+
 def mask_bits(byte, start_bit, stop_bit):
     return (((byte << start_bit) & 0xff)
             >> (7 - stop_bit + start_bit)) & 0xff
@@ -57,7 +59,8 @@ class Struct(object):
     endianness = little_endian
 
     def __new__(cls, *args, **kwargs):
-        if len(filter(lambda x: x.find('_bread_field_') != -1, dir(cls))) == 0:
+        if (len(filter(lambda x: x.find(HIDDEN_FIELD_PREFIX) != -1, dir(cls)))
+            == 0):
             # Fields haven't been initialized yet, since this is the first time
             # we're creating a new instance of this object
 
@@ -70,9 +73,27 @@ class Struct(object):
 
             cls._bread_field_order = map(lambda x: x[0], fields)
 
+            offset = 0
+
+            field_offsets = {}
+
             for (field_name, field) in fields:
                 delattr(cls, field_name)
-                setattr(cls, "_bread_field_" + field_name, field)
+                setattr(cls, HIDDEN_FIELD_PREFIX + field_name, field)
+
+                field_offsets[field_name] = int(offset)
+                offset += field.length
+
+            setattr(cls, 'LENGTH', offset)
+
+            class OffsetMap(object):
+                def __init__(self, offsets):
+                    for key, value in offsets.items():
+                        setattr(self, key, value)
+
+            offsets_obj = OffsetMap(field_offsets)
+
+            setattr(cls, "OFFSETS", offsets_obj)
 
             if hasattr(cls, "endianness"):
                 endianness = getattr(cls, "endianness")
@@ -84,7 +105,7 @@ class Struct(object):
         obj._bread_endianness = cls._bread_endianness
 
         for field in cls._bread_field_order:
-            hidden_field_name = "_bread_field_" + field
+            hidden_field_name = HIDDEN_FIELD_PREFIX + field
 
             setattr(obj, hidden_field_name,
                     copy.deepcopy(getattr(obj, hidden_field_name)))
@@ -105,7 +126,7 @@ class Struct(object):
                              type(data_source))
 
         for field_name in self._bread_field_order:
-            field = getattr(self, "_bread_field_" + field_name)
+            field = getattr(self, HIDDEN_FIELD_PREFIX + field_name)
 
             field_length_bits = len(field)
 
