@@ -1,7 +1,7 @@
 # Heavily inspired by (and some parts blatantly yanked from) y4k's newstruct.py
 # (https://raw.github.com/theY4Kman/pysmx/master/smx/newstruct.py)
 
-import struct, copy
+import struct, copy, inspect, traceback, pprint
 
 little_endian = 0
 big_endian = 1
@@ -49,15 +49,13 @@ class Field(object):
 
         Field.creation_counter += 1
 
-    def load(self, data, **kwargs):
+    def load(self, data, **kwargs): # pragma: no cover
         raise NotImplementedError("All fields must implement load()")
 
     def __len__(self):
         return self.length
 
 class Struct(object):
-    endianness = little_endian
-
     def __new__(cls, *args, **kwargs):
         if (len(filter(lambda x: x.find(HIDDEN_FIELD_PREFIX) != -1, dir(cls)))
             == 0):
@@ -82,7 +80,11 @@ class Struct(object):
                 setattr(cls, HIDDEN_FIELD_PREFIX + field_name, field)
 
                 field_offsets[field_name] = int(offset)
-                offset += field.length
+
+                if isinstance(field, Struct):
+                    offset += field.LENGTH
+                else:
+                    offset += field.length
 
             setattr(cls, 'LENGTH', offset)
 
@@ -99,6 +101,8 @@ class Struct(object):
                 endianness = getattr(cls, "endianness")
                 delattr(cls, "endianness")
                 setattr(cls, "_bread_endianness", endianness)
+            else:
+                setattr(cls, "_bread_endianness", little_endian)
 
         obj = super(Struct, cls).__new__(cls, *args, **kwargs)
 
@@ -112,18 +116,23 @@ class Struct(object):
 
         return obj
 
-    def load(self, data_source):
+    def __len__(self):
+        return self.LENGTH
+
+    def load(self, data_source, **kwargs):
         bits_loaded = 0
 
         if type(data_source) == file:
             data = map(ord, data_source.read())
         elif type(data_source) == str:
             data = map(ord, data_source)
-        elif type(data_source) == bytearray:
+        elif type(data_source) in [bytearray, list]:
             data = data_source
         else:
-            raise ValueError("Can't parse data source of type '%s'",
-                             type(data_source))
+            traceback.print_stack()
+
+            raise ValueError("Can't parse data source of type '%s'" %
+                             type(data_source).__name__)
 
         for field_name in self._bread_field_order:
             field = getattr(self, HIDDEN_FIELD_PREFIX + field_name)
@@ -148,6 +157,16 @@ class Struct(object):
 
             setattr(self, field_name, field_val)
 
+        return self
+
+    @property
+    def creation_counter(self):
+        first_field = getattr(
+            self.__class__,
+            HIDDEN_FIELD_PREFIX +
+            self.__class__.__dict__["_bread_field_order"][0])
+        return first_field.creation_counter
+
 # Mapping from (length, signed) pairs to struct symbols
 STRUCT_CONVERSION_SYMBOLS = {
     (8, True) : 'b',
@@ -164,52 +183,57 @@ class Integer(Field):
     def load(self, data, **kwargs):
         conversion = ''
 
-        if "endianness" in kwargs:
-            if kwargs["endianness"] == little_endian:
-                conversion = '<'
-            elif kwargs["endianness"] == big_endian:
-                conversion = ">"
+        if self.endianness is not None:
+            endianness = self.endianness
+        else:
+            endianness = kwargs["endianness"]
+
+        if endianness == little_endian:
+            conversion = '<'
+        elif endianness == big_endian:
+            conversion = ">"
 
         conversion += self.struct_conversion
         return struct.unpack(conversion, ''.join(map(chr, data)))[0]
 
-    def __init__(self, length, signed):
+    def __init__(self, length, signed, endianness = None):
         self.struct_conversion = STRUCT_CONVERSION_SYMBOLS[(length, signed)]
         self.length = length
+        self.endianness = endianness
 
         super(Integer, self).__init__(length)
 
 class Int8(Integer):
-    def __init__(self):
-        super(Int8, self).__init__(8, True)
+    def __init__(self, **kwargs):
+        super(Int8, self).__init__(8, True, **kwargs)
 
 class UInt8(Integer):
-    def __init__(self):
-        super(UInt8, self).__init__(8, False)
+    def __init__(self, **kwargs):
+        super(UInt8, self).__init__(8, False, **kwargs)
 
 class Int16(Integer):
-    def __init__(self):
-        super(Int16, self).__init__(16, True)
+    def __init__(self, **kwargs):
+        super(Int16, self).__init__(16, True, **kwargs)
 
 class UInt16(Integer):
-    def __init__(self):
-        super(UInt16, self).__init__(16, False)
+    def __init__(self, **kwargs):
+        super(UInt16, self).__init__(16, False, **kwargs)
 
 class Int32(Integer):
-    def __init__(self):
-        super(Int32, self).__init__(32, True)
+    def __init__(self, **kwargs):
+        super(Int32, self).__init__(32, True, **kwargs)
 
 class UInt32(Integer):
-    def __init__(self):
-        super(UInt32, self).__init__(32, False)
+    def __init__(self, **kwargs):
+        super(UInt32, self).__init__(32, False, **kwargs)
 
 class Int64(Integer):
-    def __init__(self):
-        super(Int64, self).__init__(64, True)
+    def __init__(self, **kwargs):
+        super(Int64, self).__init__(64, True, **kwargs)
 
 class UInt64(Integer):
-    def __init__(self):
-        super(UInt64, self).__init__(64, False)
+    def __init__(self, **kwargs):
+        super(UInt64, self).__init__(64, False, **kwargs)
 
 class String(Field):
     def __init__(self, length):
@@ -231,6 +255,31 @@ class Bool(Field):
             return False
         else:
             raise ValueError("Invalid boolean value %d" % (data))
+
+class _SingleByte(Field):
+    def __init__(self, length_in_bits):
+        super(_SingleByte, self).__init__(length_in_bits)
+        self.upper_bound = 2 ** length_in_bits
+
+    def load(self, data, **kwargs):
+        data = data[0]
+
+        if data < 0 or data >= self.upper_bound:
+            raise ValueError("Invalid bit value %d" % (data))
+        else:
+            return data
+
+class Bit(_SingleByte):
+    def __init__(self):
+        super(Bit, self).__init__(1)
+
+class SemiNibble(_SingleByte):
+    def __init__(self):
+        super(SemiNibble, self).__init__(2)
+
+class Nibble(_SingleByte):
+    def __init__(self):
+        super(Nibble, self).__init__(4)
 
 class Padding(Field):
     def __init__(self, length):
@@ -278,7 +327,53 @@ class Enum(Field):
                     return val
             raise ValueError("%d is not a valid enum value" % (enum_key))
         else:
-            if enum_key in enum_values:
-                return enum_values[enum_key]
+            if enum_key in self.enum_values:
+                return self.enum_values[enum_key]
             else:
                 raise ValueError("%d is not a valid enum value" % (enum_key))
+
+class Array(Field):
+    def __init__(self, array_length, prototype):
+        # Inherit prototype's creation counter so that field ordering remains
+        # intact
+        self.creation_counter = prototype.creation_counter
+
+        if isinstance(prototype, Struct):
+            self._cell_length = prototype.LENGTH
+        elif isinstance(prototype, Field):
+            self._cell_length = prototype.length
+        else:
+            raise ValueError(
+                "Prototype must be a Struct or a Field, not %s" %
+                (type(prototype)))
+
+        self.length = self._cell_length * array_length
+        self.indices = []
+
+        for i in xrange(array_length):
+            self.indices.append(copy.deepcopy(prototype))
+
+    def load(self, data, **kwargs):
+        offset = 0
+
+        output_array = []
+
+        for i, index_obj in enumerate(self.indices):
+            substr = substring_bits(
+                data, offset, offset + self._cell_length - 1)
+            output_array.append(index_obj.load(substr, **kwargs))
+            offset += self._cell_length
+
+        return output_array
+
+    # def _str_helper(self):
+    #     print self.indices[0].__dict__
+    #     str_list = []
+
+    #     for element in self.indices:
+    #         if isinstance(element, (Struct, Array)):
+    #             str_list.append(element._str_helper())
+    #         else:
+    #             str_list.append()
+
+    #     return str_list
