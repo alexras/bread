@@ -1,12 +1,18 @@
-# Heavily inspired by (and some parts blatantly yanked from) y4k's newstruct.py
-# (https://raw.github.com/theY4Kman/pysmx/master/smx/newstruct.py)
+import StringIO, types, struct, collections, functools
 
-import struct, copy, inspect, traceback, pprint
+LITTLE_ENDIAN = 0
+BIG_ENDIAN = 1
 
-little_endian = 0
-big_endian = 1
-
-HIDDEN_FIELD_PREFIX = '_bread_field_'
+STRUCT_CONVERSION_SYMBOLS = {
+    (8, True) : 'b',
+    (8, False) : 'B',
+    (16, True) : 'h',
+    (16, False) : 'H',
+    (32, True) : 'i',
+    (32, False) : 'I',
+    (64, True) : 'q',
+    (64, False) : 'Q'
+    }
 
 def mask_bits(byte, start_bit, stop_bit):
     return (((byte << start_bit) & 0xff)
@@ -18,7 +24,7 @@ def substring_bits(data, start_bit, end_bit):
 
     shift_amount = start_bit % 8
 
-    byte_list = []
+    byte_list = bytearray()
 
     for current_index in xrange(start_byte, end_byte):
         current_byte = data[current_index]
@@ -36,344 +42,203 @@ def substring_bits(data, start_bit, end_bit):
 
     return byte_list
 
-class Field(object):
+class BitwiseReader(object):
+    """Read from a data source, specifying read size in bits and returning a list
+    of bytes.
     """
-    The base class from which all fields derive.
-    """
 
-    creation_counter = 0
+    def __init__(self, data_source):
+        if type(data_source) == file:
+            self.fp = data_source
+        elif type(data_source) in (str, bytearray):
+            self.fp = StringIO.StringIO(data_source)
+        else:
+            raise ValueError("Don't know how to handle data sources of the "
+                             "given type")
 
-    def __init__(self, length):
-        self.creation_counter = Field.creation_counter
-        self.length = length
+        # Offset in the file, in bits
+        self.offset = 0
 
-        Field.creation_counter += 1
+        self.cached_bytes = None
+        self.cached_range = None
 
-    def load(self, data, **kwargs): # pragma: no cover
-        raise NotImplementedError("All fields must implement load()")
+    def read(self, bits):
+        if bits == 0:
+            return bytearray()
 
-    def __len__(self):
-        return self.length
+        start_byte = self.offset / 8
+        end_byte = (self.offset + bits - 1) / 8
 
-class Struct(object):
-    def __new__(cls, *args, **kwargs):
-        if (len(filter(lambda x: x.find(HIDDEN_FIELD_PREFIX) != -1, dir(cls)))
-            == 0):
-            # Fields haven't been initialized yet, since this is the first time
-            # we're creating a new instance of this object
+        if self.cached_range is None or start_byte > self.cached_range[1]:
+            # Cache the entire range, since we currently don't have it
+            self.cached_bytes = collections.deque(
+                map(ord, self.fp.read(end_byte - start_byte + 1)))
+            self.cached_range = [start_byte, end_byte]
+        elif end_byte > self.cached_range[1]:
+            # Extend the cache to include bytes up to the end byte
+            self.cached_bytes.extend(map(
+                ord, self.fp.read(end_byte - self.cached_range[1])))
+            self.cached_range[1] = end_byte
 
-            fields = map(lambda y: (y, getattr(cls, y)),
-                         filter(lambda x: x[0] != '_' and
-                                (issubclass(type(getattr(cls, x)), Struct) or
-                                 issubclass(type(getattr(cls, x)), Field)),
-                                dir(cls)))
-            fields.sort(key = lambda x: x[1].creation_counter)
+        # Drop elements from the cache up to the first byte we need
+        while self.cached_range[0] < start_byte:
+            self.cached_bytes.popleft()
+            self.cached_range[0] += 1
 
-            cls._bread_field_order = map(lambda x: x[0], fields)
+        assert len(self.cached_bytes) == (
+            self.cached_range[1] - self.cached_range[0] + 1)
 
-            offset = 0
+        start_cached_bit = self.offset - (self.cached_range[0] * 8)
+        end_cached_bit = start_cached_bit + bits - 1
 
-            field_offsets = {}
+        self.offset += bits
 
-            for (field_name, field) in fields:
-                delattr(cls, field_name)
-                setattr(cls, HIDDEN_FIELD_PREFIX + field_name, field)
+        return substring_bits(
+            self.cached_bytes, start_cached_bit, end_cached_bit)
 
-                field_offsets[field_name] = int(offset)
+    def close(self):
+        self.fp.close()
 
-                if isinstance(field, Struct):
-                    offset += field.LENGTH
-                else:
-                    offset += field.length
+def parse(data_source, spec, type_name='bread_struct'):
+    reader = BitwiseReader(data_source)
 
-            setattr(cls, 'LENGTH', offset)
+    return parse_from_reader(reader, spec, type_name)
 
-            class OffsetMap(object):
-                def __init__(self, offsets):
-                    for key, value in offsets.items():
-                        setattr(self, key, value)
+def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
+    offsets = {}
+    length = 0
+    parsed_dict = {}
 
-            offsets_obj = OffsetMap(field_offsets)
+    start_reader_offset = reader.offset
 
-            setattr(cls, "OFFSETS", offsets_obj)
+    global_options = {}
 
-            if hasattr(cls, "endianness"):
-                endianness = getattr(cls, "endianness")
-                delattr(cls, "endianness")
-                setattr(cls, "_bread_endianness", endianness)
+    for spec_line in spec:
+        if type(spec_line) == dict:
+            global_options = spec_line
+        elif isinstance(spec_line, types.FunctionType):
+            spec_line(reader, **global_options)
+        elif len(spec_line) == 1:
+            parse_function = spec_line[0]
+            parse_function(reader, **global_options)
+        else:
+            field_name = spec_line[0]
+            parse_function = spec_line[1]
+            options = global_options
+
+            if len(spec_line) == 3:
+                options = global_options.copy()
+                options.update(spec_line[2])
+
+            offsets[field_name] = reader.offset
+
+            if type(parse_function) == list:
+                val = parse_from_reader(reader, parse_function, **options)
             else:
-                setattr(cls, "_bread_endianness", little_endian)
+                val = parse_function(reader, **options)
 
-        obj = super(Struct, cls).__new__(cls, *args, **kwargs)
+            if val is not None:
+                parsed_dict[field_name] = val
 
-        obj._bread_endianness = cls._bread_endianness
+    parsed_dict["OFFSETS"] = type('bread_struct_offsets', (object, ), offsets)
+    parsed_dict["LENGTH"] = reader.offset - start_reader_offset
 
-        for field in cls._bread_field_order:
-            hidden_field_name = HIDDEN_FIELD_PREFIX + field
-
-            setattr(obj, hidden_field_name,
-                    copy.deepcopy(getattr(obj, hidden_field_name)))
-
-        return obj
-
-    def __len__(self):
+    def my_length(self):
         return self.LENGTH
 
-    def load(self, data_source, **kwargs):
-        bits_loaded = 0
+    parsed_type = type(type_name, (object,), parsed_dict)
 
-        if type(data_source) == file:
-            data = map(ord, data_source.read())
-        elif type(data_source) == str:
-            data = map(ord, data_source)
-        elif type(data_source) in [bytearray, list]:
-            data = data_source
-        else:
-            traceback.print_stack()
+    parsed_type.__len__ = types.MethodType(
+        my_length, parsed_type, parsed_type.__class__)
 
-            raise ValueError("Can't parse data source of type '%s'" %
-                             type(data_source).__name__)
+    return parsed_type()
 
-        for field_name in self._bread_field_order:
-            field = getattr(self, HIDDEN_FIELD_PREFIX + field_name)
+def make_integer_type(length, signed):
+    struct_conversion_symbol = (
+        STRUCT_CONVERSION_SYMBOLS[(length, signed)])
 
-            field_length_bits = len(field)
-
-            field_bytes = substring_bits(
-                data, bits_loaded, bits_loaded + field_length_bits - 1)
-
-            try:
-                field_val = field.load(
-                    field_bytes, endianness = self._bread_endianness)
-                bits_loaded += field_length_bits
-            except Exception, e:
-                if not e.args:
-                    e.args = ['']
-
-                e.args = (("Parsing field '%s' failed: " % (field_name))
-                          + e.args[0],) + e.args[1:]
-
-                raise e
-
-            setattr(self, field_name, field_val)
-
-        return self
-
-    @property
-    def creation_counter(self):
-        first_field = getattr(
-            self.__class__,
-            HIDDEN_FIELD_PREFIX +
-            self.__class__.__dict__["_bread_field_order"][0])
-        return first_field.creation_counter
-
-# Mapping from (length, signed) pairs to struct symbols
-STRUCT_CONVERSION_SYMBOLS = {
-    (8, True) : 'b',
-    (8, False) : 'B',
-    (16, True) : 'h',
-    (16, False) : 'H',
-    (32, True) : 'i',
-    (32, False) : 'I',
-    (64, True) : 'q',
-    (64, False) : 'Q'
-    }
-
-class Integer(Field):
-    def load(self, data, **kwargs):
+    def integer_type(reader, endianness = LITTLE_ENDIAN, offset = 0, **kwargs):
         conversion = ''
 
-        if self.endianness is not None:
-            endianness = self.endianness
-        else:
-            endianness = kwargs["endianness"]
-
-        if endianness == little_endian:
+        if endianness == LITTLE_ENDIAN:
             conversion = '<'
-        elif endianness == big_endian:
-            conversion = ">"
+        elif endianness == BIG_ENDIAN:
+            conversion = '>'
 
-        conversion += self.struct_conversion
-        return struct.unpack(conversion, ''.join(map(chr, data)))[0]
+        conversion += struct_conversion_symbol
 
-    def __init__(self, length, signed, endianness = None):
-        self.struct_conversion = STRUCT_CONVERSION_SYMBOLS[(length, signed)]
-        self.length = length
-        self.endianness = endianness
+        return struct.unpack_from(conversion, reader.read(length))[0] + offset
 
-        super(Integer, self).__init__(length)
+    return integer_type
 
-class Int8(Integer):
-    def __init__(self, **kwargs):
-        super(Int8, self).__init__(8, True, **kwargs)
+uint8  = make_integer_type(length=8,  signed=False)
+byte = uint8
+uint16 = make_integer_type(length=16, signed=False)
+uint32 = make_integer_type(length=32, signed=False)
+uint64 = make_integer_type(length=64, signed=False)
+int8   = make_integer_type(length=8,  signed=True)
+int16  = make_integer_type(length=16, signed=True)
+int32  = make_integer_type(length=32, signed=True)
+int64  = make_integer_type(length=64, signed=True)
 
-class UInt8(Integer):
-    def __init__(self, **kwargs):
-        super(UInt8, self).__init__(8, False, **kwargs)
+def make_sub_byte_type(length):
+    upper_bound = 2 ** length
 
-class Int16(Integer):
-    def __init__(self, **kwargs):
-        super(Int16, self).__init__(16, True, **kwargs)
+    def sub_byte_type_parser(reader, **kwargs):
+        data = reader.read(length)[0]
 
-class UInt16(Integer):
-    def __init__(self, **kwargs):
-        super(UInt16, self).__init__(16, False, **kwargs)
-
-class Int32(Integer):
-    def __init__(self, **kwargs):
-        super(Int32, self).__init__(32, True, **kwargs)
-
-class UInt32(Integer):
-    def __init__(self, **kwargs):
-        super(UInt32, self).__init__(32, False, **kwargs)
-
-class Int64(Integer):
-    def __init__(self, **kwargs):
-        super(Int64, self).__init__(64, True, **kwargs)
-
-class UInt64(Integer):
-    def __init__(self, **kwargs):
-        super(UInt64, self).__init__(64, False, **kwargs)
-
-class String(Field):
-    def __init__(self, length):
-        super(String, self).__init__(length)
-
-    def load(self, data, **kwargs):
-        return struct.unpack("%ds" % self.length, data)
-
-class Bool(Field):
-    def __init__(self):
-        super(Bool, self).__init__(1)
-
-    def load(self, data, **kwargs):
-        data = data[0]
-
-        if data == 1:
-            return True
-        elif data == 0:
-            return False
-        else:
-            raise ValueError("Invalid boolean value %d" % (data))
-
-class _SingleByte(Field):
-    def __init__(self, length_in_bits):
-        super(_SingleByte, self).__init__(length_in_bits)
-        self.upper_bound = 2 ** length_in_bits
-
-    def load(self, data, **kwargs):
-        data = data[0]
-
-        if data < 0 or data >= self.upper_bound:
+        if data < 0 or data >= upper_bound:
             raise ValueError("Invalid bit value %d" % (data))
         else:
             return data
 
-class Bit(_SingleByte):
-    def __init__(self):
-        super(Bit, self).__init__(1)
+    return sub_byte_type_parser
 
-class SemiNibble(_SingleByte):
-    def __init__(self):
-        super(SemiNibble, self).__init__(2)
+bit = make_sub_byte_type(1)
+semi_nibble = make_sub_byte_type(2)
+nibble = make_sub_byte_type(4)
 
-class Nibble(_SingleByte):
-    def __init__(self):
-        super(Nibble, self).__init__(4)
+def string(length, **kwargs):
+    def string_parser(reader, **kwargs):
+        return struct.unpack("%ds" % (self.length), reader.read(length))
 
-class Padding(Field):
-    def __init__(self, length):
-        super(Padding, self).__init__(length)
+    return string_parser
 
-    def load(self, data, **kwargs):
+def boolean(reader, **kwargs):
+    return bool(reader.read(1)[0])
+
+def padding(length):
+    def pad_parser(reader, **kwargs):
+        # Skip over bits
+        reader.read(length)
         return None
 
-class Enum(Field):
-    def __init__(self, length, enum_values):
-        self.length = length
-        self.enum_values = enum_values
+    return pad_parser
 
-        if type(enum_values.keys()[0]) is tuple:
-            self.key_ranges = True
-        elif type(enum_values.keys()[0]) is int:
-            self.key_ranges = False
-        else:
-            raise ValueError("Enum keys must be ints or tuples")
+def enum(length, values):
+    subparser = make_integer_type(length=length, signed=False)
 
-        if self.length == 1:
-            self.substruct = Bit()
-        elif self.length == 2:
-            self.substruct = SemiNibble()
-        elif self.length == 4:
-            self.substruct = Nibble()
-        elif self.length == 8:
-            self.substruct = UInt8()
-        elif self.length == 16:
-            self.substruct = UInt16()
-        elif self.length == 32:
-            self.substruct = UInt32()
-        elif self.length == 64:
-            self.substruct = UInt64()
-        else:
-            raise ValueError("bread doesn't currently support enums with keys "
-                             "larger than 64 bits")
+    def parser(reader, **kwargs):
+        coded_value = subparser(reader)
 
-    def load(self, data, **kwargs):
-        enum_key = self.substruct.load(data, **kwargs)
+        return values[coded_value]
 
-        if self.key_ranges:
-            for key_range, val in self.enum_values.items():
-                if enum_key in xrange(*key_range):
-                    return val
-            raise ValueError("%d is not a valid enum value" % (enum_key))
-        else:
-            if enum_key in self.enum_values:
-                return self.enum_values[enum_key]
-            else:
-                raise ValueError("%d is not a valid enum value" % (enum_key))
+def array(length, substruct):
 
-class Array(Field):
-    def __init__(self, array_length, prototype):
-        # Inherit prototype's creation counter so that field ordering remains
-        # intact
-        self.creation_counter = prototype.creation_counter
+    if type(substruct) == list:
+        # Passed a nested struct, which should be parsed according to its spec
+        subparse_function = functools.partial(parse_from_reader, spec=substruct)
+    else:
+        # Passed a parsing function; should just return whatever that thing
+        # parses
+        subparse_function = substruct
 
-        if isinstance(prototype, Struct):
-            self._cell_length = prototype.LENGTH
-        elif isinstance(prototype, Field):
-            self._cell_length = prototype.length
-        else:
-            raise ValueError(
-                "Prototype must be a Struct or a Field, not %s" %
-                (type(prototype)))
+    def parser(reader, **kwargs):
+        substructs = []
 
-        self.length = self._cell_length * array_length
-        self.indices = []
+        for i in xrange(length):
+            substructs.append(subparse_function(reader))
 
-        for i in xrange(array_length):
-            self.indices.append(copy.deepcopy(prototype))
+        return substructs
 
-    def load(self, data, **kwargs):
-        offset = 0
-
-        output_array = []
-
-        for i, index_obj in enumerate(self.indices):
-            substr = substring_bits(
-                data, offset, offset + self._cell_length - 1)
-            output_array.append(index_obj.load(substr, **kwargs))
-            offset += self._cell_length
-
-        return output_array
-
-    # def _str_helper(self):
-    #     print self.indices[0].__dict__
-    #     str_list = []
-
-    #     for element in self.indices:
-    #         if isinstance(element, (Struct, Array)):
-    #             str_list.append(element._str_helper())
-    #         else:
-    #             str_list.append()
-
-    #     return str_list
+    return parser
