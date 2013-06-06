@@ -218,7 +218,7 @@ nibble = make_sub_byte_type(4)
 
 def string(length, **kwargs):
     def string_parser(reader, **kwargs):
-        return struct.unpack("%ds" % (self.length), reader.read(length))
+        return struct.unpack("%ds" % (length), reader.read(length * 8))[0]
 
     return string_parser
 
