@@ -106,6 +106,7 @@ def parse(data_source, spec, type_name='bread_struct'):
 
 def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
     offsets = {}
+    keys = []
     length = 0
     parsed_dict = {}
 
@@ -130,6 +131,13 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
                 options = global_options.copy()
                 options.update(spec_line[2])
 
+            if "str_format" in options:
+                formatter = options["str_format"]
+            else:
+                formatter = str
+
+            keys.append((field_name, formatter))
+
             offsets[field_name] = reader.offset
 
             if type(parse_function) == list:
@@ -146,10 +154,20 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
     def my_length(self):
         return self.LENGTH
 
+    def my_print(self):
+        string = ""
+
+        for key, formatter in keys:
+            string += "%s: %s\n" % (key, formatter(getattr(self, key)))
+
+        return string
+
     parsed_type = type(type_name, (object,), parsed_dict)
 
     parsed_type.__len__ = types.MethodType(
         my_length, parsed_type, parsed_type.__class__)
+    parsed_type.__str__ = types.MethodType(
+        my_print, parsed_type, parsed_type.__class__)
 
     return parsed_type()
 
