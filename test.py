@@ -36,7 +36,8 @@ test_struct = [
     ("flag_three", b.boolean),
     ("flag_four", b.boolean),
     ("first", b.uint8),
-    (b.padding(4),),
+    (b.padding(2),),
+    b.padding(2),
     ("blah", b.uint16),
     ("second", b.int64),
     ("third", b.uint64),
@@ -241,3 +242,45 @@ def test_endianness():
     assert test.big_endian == 0x01020304
     assert test.little_endian == 0x04030201
     assert test.default_endian == test.little_endian
+
+def test_conditional():
+    conditional_test = [
+        ("qux", b.boolean),
+        (b.CONDITIONAL, "qux", {
+            False: [("fooz", b.byte)],
+            True: [("frooz", b.nibble)]
+        })
+    ]
+
+    true_test = b.parse(bytearray([0b11001000]), conditional_test)
+    assert true_test.qux == True
+    assert hasattr(true_test, "frooz")
+    assert not hasattr(true_test, "fooz")
+    assert true_test.frooz == 0b1001
+
+    false_test = b.parse(bytearray([0b01001000, 0b10000000]), conditional_test)
+    assert false_test.qux == False
+    assert hasattr(false_test, "fooz")
+    assert not hasattr(false_test, "frooz")
+    assert false_test.fooz == 0b10010001
+
+def test_str():
+    str_test = [("msg", b.string(5))]
+
+    result = b.parse(bytearray([0x68, 0x65, 0x6c, 0x6c, 0x6f]), str_test)
+
+    assert result.msg == "hello"
+
+def test_enum():
+    enum_test = [
+        ("suit", b.enum(8, {
+            0: "diamonds",
+            1: "hearts",
+            2: "spades",
+            3: "clubs"
+        }))]
+
+    for value, suit in zip(range(4), ["diamonds", "hearts", "spades", "clubs"]):
+        result = b.parse(bytearray([value]), enum_test)
+
+        assert result.suit == suit

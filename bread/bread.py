@@ -2,6 +2,7 @@ import StringIO, types, struct, collections, functools
 
 LITTLE_ENDIAN = 0
 BIG_ENDIAN = 1
+CONDITIONAL = 2
 
 STRUCT_CONVERSION_SYMBOLS = {
     (8, True) : 'b',
@@ -114,14 +115,34 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
 
     global_options = {}
 
-    for spec_line in spec:
+    spec = collections.deque(spec)
+
+    # Read specification one line at a time, greedily consuming bits from the
+    # stream as you go
+    while len(spec) > 0:
+        spec_line = spec.popleft()
+
         if type(spec_line) == dict:
+            # A dictionary in the spec indicates global options for parsing
             global_options = spec_line
         elif isinstance(spec_line, types.FunctionType):
+            # If the spec contains a function, that function should be applied
+            # to the input stream (this is typically done to parse padding bits)
             spec_line(reader, **global_options)
         elif len(spec_line) == 1:
+            # Spec lines of length 1 are assumed to be functions, which are
+            # treated the same as before
             parse_function = spec_line[0]
             parse_function(reader, **global_options)
+        elif spec_line[0] == CONDITIONAL:
+            # Push appropriate conditional spec on the front of the current
+            # one so that it will be evaluated next
+
+            conditional_val = parsed_dict[spec_line[1]]
+
+            condition_spec = spec_line[2][conditional_val]
+
+            spec.extendleft(condition_spec)
         else:
             field_name = spec_line[0]
             parse_function = spec_line[1]
@@ -171,7 +192,7 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
 
     return parsed_type()
 
-def make_integer_type(length, signed):
+def intX(length, signed = False):
     struct_conversion_symbol = (
         STRUCT_CONVERSION_SYMBOLS[(length, signed)])
 
@@ -189,15 +210,15 @@ def make_integer_type(length, signed):
 
     return integer_type
 
-uint8  = make_integer_type(length=8,  signed=False)
+uint8  = intX(length=8,  signed=False)
 byte = uint8
-uint16 = make_integer_type(length=16, signed=False)
-uint32 = make_integer_type(length=32, signed=False)
-uint64 = make_integer_type(length=64, signed=False)
-int8   = make_integer_type(length=8,  signed=True)
-int16  = make_integer_type(length=16, signed=True)
-int32  = make_integer_type(length=32, signed=True)
-int64  = make_integer_type(length=64, signed=True)
+uint16 = intX(length=16, signed=False)
+uint32 = intX(length=32, signed=False)
+uint64 = intX(length=64, signed=False)
+int8   = intX(length=8,  signed=True)
+int16  = intX(length=16, signed=True)
+int32  = intX(length=32, signed=True)
+int64  = intX(length=64, signed=True)
 
 def make_sub_byte_type(length):
     upper_bound = 2 ** length
@@ -234,12 +255,14 @@ def padding(length):
     return pad_parser
 
 def enum(length, values):
-    subparser = make_integer_type(length=length, signed=False)
+    subparser = intX(length=length, signed=False)
 
     def parser(reader, **kwargs):
         coded_value = subparser(reader)
 
         return values[coded_value]
+
+    return parser
 
 def array(length, substruct):
 
