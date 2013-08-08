@@ -1,5 +1,7 @@
 # `bread` - Binary format parsing made easier
 
+![](https://raw.github.com/alexras/bread/web/images/powdered-toast-man.jpg)
+
 Reading binary formats is a pain. `bread` (short for "binary read", but
 pronounced like the baked good) makes that simpler.
 
