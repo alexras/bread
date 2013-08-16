@@ -1,4 +1,4 @@
-# `bread` - Binary format parsing made easier
+# `bread` - Easier Binary Format Parsing
 
 ![](https://raw.github.com/alexras/bread/web/images/powdered-toast-man.jpg)
 
