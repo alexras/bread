@@ -12,16 +12,6 @@ from the input, usually to create a *field* in the resulting object. Field
 descriptors are consumed from the format specification one at a time until the
 entire list has been consumed.
 
-Parsing Options
----------------
-
-Padding
--------
-
-:py:`padding(num_bits)` - indicates that the next ``num_bits`` bits should be
-ignored. Useful in situations where only the first few bits of a byte are
-meaningful, or where the format skips multiple bits or bytes.
-
 Field Descriptors
 -----------------
 
@@ -70,7 +60,7 @@ Enumerations
 ``enum(length, values)`` - the next ``length`` bits represent one of a set of
 values, whose values are given by the dictionary ``values``.
 
-Here is an example of a 2-bit field representing a card suit:::
+Here is an example of a 2-bit field representing a card suit: ::
 
      import bread as b
 
@@ -88,7 +78,7 @@ Arrays
 occurrences of ``field_or_struct`` which, as the name might imply, can be
 either a field (including another array) or a format specification.
 
-Here's an example way of representing a deck of playing cards:::
+Here's an example way of representing a deck of playing cards: ::
 
      import bread as b
 
@@ -107,11 +97,58 @@ Here's an example way of representing a deck of playing cards:::
 
      deck = [("cards", b.array(52, card))]
 
+Field Options
+-------------
+
+A dictionary of field options can be specified as the last argument to any
+field. A dictionary of global field options can also be defined at the
+beginning of the format spec (before any fields). Options defined on fields
+override these global options.
+
+The following field options are defined:
+
+* ``str_format`` - the function that should be used to format a field in the
+  structure's human-readable representation. For example: ::
+
+       >>> import bread as b
+
+       # Format spec without str_format ...
+       >>> simple_spec = [('addr', b.uint8)]
+       >>> parsed_data = b.parse(bytearray([42]), simple_spec)
+       >>> print parsed_data
+       addr: 42
+
+       # ... and with str_format
+       >>> simple_spec_hex = [('addr', b.uint8, {"str_format": hex})]
+       >>> parsed_data = b.parse(bytearray([42]), simple_spec_hex)
+       >>> print parsed_data
+       addr: 0x2a
+* ``endianness`` - for integer types, the endianness of the bytes that make up
+  that integer. Can either be ``LITTLE_ENDIAN`` or ``BIG_ENDIAN``. Default is
+  little-endian.
+
+  A simple example: ::
+
+       endianness_test = [
+         ("big_endian", b.uint32, {"endianness" : b.BIG_ENDIAN}),
+         ("little_endian", b.uint32, {"endianness" : b.LITTLE_ENDIAN}),
+         ("default_endian", b.uint32)]
+
+       data = bytearray([0x01, 0x02, 0x03, 0x04] * 3)
+       test = b.parse(data, endianness_test)
+
+       >>> test.big_endian == 0x01020304
+       True
+       >>> test.little_endian == 0x04030201
+       True
+       >>> test.default_endian == test.little_endian
+       True
+
 Conditionals
-~~~~~~~~~~~~
+------------
 
 Conditionals allow the format specification to branch based on the value of a
-previous field. Conditional field descriptors are specified as follows:::
+previous field. Conditional field descriptors are specified as follows: ::
 
      (CONDITIONAL "field_name", options)
 
@@ -119,7 +156,7 @@ where ``field_name`` is the name of the field whose value determines the course
 of the conditional, and ``options`` is a dictionary giving format
 specifications to evaluate based on the field's value.
 
-This is perhaps best illustrated by example:::
+This is perhaps best illustrated by example: ::
 
      import bread as b
 
@@ -139,3 +176,10 @@ This is perhaps best illustrated by example:::
              "B": widget_B,
              "C": widget_C
          })]
+
+Padding
+-------
+
+``padding(num_bits)`` - indicates that the next ``num_bits`` bits should be
+ignored. Useful in situations where only the first few bits of a byte are
+meaningful, or where the format skips multiple bits or bytes.
