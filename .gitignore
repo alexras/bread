@@ -1,3 +1,4 @@
 *.pyc
 cover/
 .coverage
+docs/build
