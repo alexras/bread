@@ -67,17 +67,17 @@ def test_simple_struct():
 
     test = b.parse(data, spec = test_struct)
 
-    assert test.OFFSETS.flag_one == 0
-    assert test.OFFSETS.flag_two == 1
-    assert test.OFFSETS.flag_three == 2
-    assert test.OFFSETS.flag_four == 3
-    assert test.OFFSETS.first == 4
-    assert test.OFFSETS.blah == 16
-    assert test.OFFSETS.second == 32
-    assert test.OFFSETS.third == 96
-    assert test.OFFSETS.fourth == 160
+    assert test.__offsets__.flag_one == 0
+    assert test.__offsets__.flag_two == 1
+    assert test.__offsets__.flag_three == 2
+    assert test.__offsets__.flag_four == 3
+    assert test.__offsets__.first == 4
+    assert test.__offsets__.blah == 16
+    assert test.__offsets__.second == 32
+    assert test.__offsets__.third == 96
+    assert test.__offsets__.fourth == 160
 
-    assert test.LENGTH == len(test) == 168
+    assert len(test) == 168
 
     assert test.flag_one == True
     assert test.flag_two == False
@@ -100,17 +100,17 @@ def test_updates_do_not_leak():
 
     # test2's offsets should be the same as test's
 
-    assert test2.OFFSETS.flag_one == 0
-    assert test2.OFFSETS.flag_two == 1
-    assert test2.OFFSETS.flag_three == 2
-    assert test2.OFFSETS.flag_four == 3
-    assert test2.OFFSETS.first == 4
-    assert test2.OFFSETS.blah == 16
-    assert test2.OFFSETS.second == 32
-    assert test2.OFFSETS.third == 96
-    assert test2.OFFSETS.fourth == 160
+    assert test2.__offsets__.flag_one == 0
+    assert test2.__offsets__.flag_two == 1
+    assert test2.__offsets__.flag_three == 2
+    assert test2.__offsets__.flag_four == 3
+    assert test2.__offsets__.first == 4
+    assert test2.__offsets__.blah == 16
+    assert test2.__offsets__.second == 32
+    assert test2.__offsets__.third == 96
+    assert test2.__offsets__.fourth == 160
 
-    assert test2.LENGTH == 168
+    assert len(test2) == 168
 
     assert test2.flag_one == False
     assert test2.flag_two == False
@@ -148,11 +148,11 @@ def test_array():
 
     array_test = b.parse(data, test_array_struct)
 
-    assert array_test.OFFSETS.first == 0
-    assert array_test.OFFSETS.flags == 8
-    assert array_test.OFFSETS.last == 16
+    assert array_test.__offsets__.first == 0
+    assert array_test.__offsets__.flags == 8
+    assert array_test.__offsets__.last == 16
 
-    assert array_test.LENGTH == 24
+    assert len(array_test) == 24
 
     assert (array_test.flags ==
             [True, False, False, True, False, True, False, True])
@@ -162,10 +162,10 @@ def test_nested_array():
 
     nested_test = b.parse(data, nested_array_struct)
 
-    assert nested_test.OFFSETS.first == 0
-    assert nested_test.OFFSETS.matrix == 8
-    assert nested_test.OFFSETS.last == 80
-    assert nested_test.LENGTH == 88
+    assert nested_test.__offsets__.first == 0
+    assert nested_test.__offsets__.matrix == 8
+    assert nested_test.__offsets__.last == 80
+    assert len(nested_test) == 88
 
     assert nested_test.first == 42
 
@@ -179,9 +179,8 @@ def test_nested_struct():
 
     supernested_test = b.parse(data, deeply_nested_struct)
 
-    assert supernested_test.OFFSETS.ubermatrix == 0
-    assert supernested_test.OFFSETS.dummy == 264
-    assert supernested_test.LENGTH == 273
+    assert supernested_test.__offsets__.ubermatrix == 0
+    assert supernested_test.__offsets__.dummy == 264
     assert len(supernested_test) == 273
 
     assert len(supernested_test.ubermatrix) == 3

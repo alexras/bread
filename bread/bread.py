@@ -169,11 +169,12 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
             if val is not None:
                 parsed_dict[field_name] = val
 
-    parsed_dict["OFFSETS"] = type('bread_struct_offsets', (object, ), offsets)
-    parsed_dict["LENGTH"] = reader.offset - start_reader_offset
+    parsed_dict["__offsets__"] = type('bread_struct_offsets', (object, ),
+                                      offsets)
+    parsed_dict["_LENGTH"] = reader.offset - start_reader_offset
 
     def my_length(self):
-        return self.LENGTH
+        return self._LENGTH
 
     def my_print(self):
         string = ""
