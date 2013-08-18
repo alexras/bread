@@ -20,3 +20,4 @@ User's Guide
    intro
    spec_language
    parsing
+   examples

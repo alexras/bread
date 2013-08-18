@@ -123,6 +123,7 @@ The following field options are defined:
        >>> parsed_data = b.parse(bytearray([42]), simple_spec_hex)
        >>> print parsed_data
        addr: 0x2a
+
 * ``endianness`` - for integer types, the endianness of the bytes that make up
   that integer. Can either be ``LITTLE_ENDIAN`` or ``BIG_ENDIAN``. Default is
   little-endian.
@@ -143,6 +144,10 @@ The following field options are defined:
        True
        >>> test.default_endian == test.little_endian
        True
+
+* ``offset`` - for integer types, the amount to add to the number after it has
+  been parsed. Specifying a negative number will subtract that amount from the
+  number.
 
 Conditionals
 ------------
