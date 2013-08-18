@@ -70,6 +70,12 @@ matrix: [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
 last: 219
 ```
 
+## Installation
+
+A recent stable version of `bread` can be installed by running
+
+`$ pip install bread`
+
 ## Documentation
 
 For the latest documentation, go to [https://bread.readthedocs.org/en/latest/]()
