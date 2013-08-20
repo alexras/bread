@@ -283,3 +283,46 @@ def test_enum():
         result = b.parse(bytearray([value]), enum_test)
 
         assert result.suit == suit
+
+def test_conditional_on_non_integer_enum():
+    enum_test = [
+        ("instrument_type", b.enum(8, {
+            0: "pulse",
+            1: "wave",
+            2: "kit",
+            3: "noise"
+        })),
+        (b.CONDITIONAL, "instrument_type", {
+            "pulse": [("pulse_foo", b.uint8)],
+            "wave": [("wave_foo", b.uint8)],
+            "kit": [("kit_foo", b.uint8)],
+            "noise": [("noise_foo", b.uint8)]
+        })]
+
+    pulse_test = bytearray([0, 19])
+
+    pulse = b.parse(pulse_test, enum_test)
+
+    assert pulse.instrument_type == "pulse"
+    assert pulse.pulse_foo == 19
+
+    wave_test = bytearray([1, 65])
+
+    wave = b.parse(wave_test, enum_test)
+
+    assert wave.instrument_type == "wave"
+    assert wave.wave_foo == 65
+
+    kit_test = bytearray([2, 9])
+
+    kit = b.parse(kit_test, enum_test)
+
+    assert kit.instrument_type == "kit"
+    assert kit.kit_foo == 9
+
+    noise_test = bytearray([3, 17])
+
+    noise = b.parse(noise_test, enum_test)
+
+    assert noise.instrument_type == "noise"
+    assert noise.noise_foo == 17
