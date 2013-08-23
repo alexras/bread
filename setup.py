@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='bread',
-      version='1.0',
+      version='1.1',
       description='Binary format parsing made easier',
       url='https://github.com/alexras/bread',
       author='Alex Rasmussen',
