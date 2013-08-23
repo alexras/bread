@@ -4,13 +4,6 @@ import struct, sys, pprint, unittest, itertools
 
 import bread as b
 
-def test_basic_mask():
-    assert b.mask_bits(0xaf, 0, 3 == 0xa)
-
-def test_shift_data():
-    shift_data = [0x5d, 0xf0, 0x15] # 0b01011101, 0b11110000, 0b00010101
-    assert b.substring_bits(shift_data, 3, 3) == bytearray([0x1])
-    assert b.substring_bits(shift_data, 3, 13) == bytearray([0xef, 0x4])
 
 def test_bitwise_reader():
     shift_data = [0x5d, 0xf0, 0x15] # 0b01011101, 0b11110000, 0b00010101
@@ -64,7 +57,6 @@ deeply_nested_struct = [
 
 def test_simple_struct():
     data = struct.pack(">IqQb", 0xafb3dddd, -57, 90, 0)
-
     test = b.parse(data, spec = test_struct)
 
     assert test.__offsets__.flag_one == 0
@@ -203,15 +195,6 @@ def test_nested_struct():
     current_byte += 1
     assert supernested_test.dummy.ok == False
 
-def test_bool_invalid_value():
-    bool_struct = [(b.boolean)]
-
-    try:
-        b.parse([5], bool_struct)
-        assert False, "5 should not parse as a Bool"
-    except ValueError, e:
-        pass
-
 def test_single_byte_fields():
     single_byte_fields_struct = [
         ("bit_0", b.bit),
@@ -326,3 +309,21 @@ def test_conditional_on_non_integer_enum():
 
     assert noise.instrument_type == "noise"
     assert noise.noise_foo == 17
+
+def test_non_powers_of_eight_intX():
+    intX_test = [
+        ("unsigned_10b", b.intX(10, False)),
+        ("unsigned_14b", b.intX(14, False)),
+        ("signed_20b", b.intX(20, True)),
+        ("signed_4b", b.intX(4, True)),
+    ]
+
+    in_bytes = bytearray([
+        0b11010101, 0b11101010, 0b00110101, 0b11010101, 0b11101010, 0b00110101])
+
+    result = b.parse(in_bytes, intX_test)
+
+    assert result.unsigned_10b == 0b1101010111
+    assert result.unsigned_14b == 0b10101000110101
+    assert result.signed_20b == - 0b101010000101011101
+    assert result.signed_4b == 0b0101
