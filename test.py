@@ -4,22 +4,6 @@ import struct, sys, pprint, unittest, itertools
 
 import bread as b
 
-
-def test_bitwise_reader():
-    shift_data = [0x5d, 0xf0, 0x15] # 0b01011101, 0b11110000, 0b00010101
-
-    shift_data_str = ''.join(map(chr, shift_data))
-
-    reader = b.BitwiseReader(shift_data_str)
-
-    assert reader.read(3) == bytearray([0b010])
-    assert reader.read(10) == bytearray([0b11101111, 0b10])
-    assert reader.read(0) == bytearray()
-    assert reader.read(3) == bytearray([0b0])
-    assert reader.read(8) == bytearray([0b00010101])
-
-    reader.close()
-
 # Shared structs for bread struct test
 
 test_struct = [
@@ -56,7 +40,7 @@ deeply_nested_struct = [
 ]
 
 def test_simple_struct():
-    data = struct.pack(">IqQb", 0xafb3dddd, -57, 90, 0)
+    data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
     test = b.parse(data, spec = test_struct)
 
     assert test.__offsets__.flag_one == 0
@@ -81,6 +65,10 @@ def test_simple_struct():
     assert test.second == -57
     assert test.third == 90
     assert test.fourth == 0
+
+    output_data = b.write(test, test_struct)
+
+    assert output_data == data
 
 def test_updates_do_not_leak():
     data = struct.pack(">IqQb", 0xafb3dddd, -57, 90, 0)
@@ -149,6 +137,8 @@ def test_array():
     assert (array_test.flags ==
             [True, False, False, True, False, True, False, True])
 
+    assert b.write(array_test, test_array_struct) == data
+
 def test_nested_array():
     data = bytearray([42, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0xdb])
 
@@ -165,6 +155,8 @@ def test_nested_array():
         assert nested_test.matrix[i / 3][i % 3] == i
 
     assert nested_test.last == 0xdb
+
+    assert b.write(nested_test, nested_array_struct) == data
 
 def test_nested_struct():
     data = bytearray(range(36))
@@ -195,6 +187,9 @@ def test_nested_struct():
     current_byte += 1
     assert supernested_test.dummy.ok == False
 
+    assert (b.write(supernested_test, deeply_nested_struct) ==
+            bytearray(range(34) + [0b0]))
+
 def test_single_byte_fields():
     single_byte_fields_struct = [
         ("bit_0", b.bit),
@@ -211,6 +206,8 @@ def test_single_byte_fields():
     assert test.semi_nibble == 0b11
     assert test.nibble == 0b0010
 
+    assert b.write(test, single_byte_fields_struct) == data
+
 def test_endianness():
     endianness_test = [
         ("big_endian", b.uint32, {"endianness" : b.BIG_ENDIAN}),
@@ -225,6 +222,8 @@ def test_endianness():
     assert test.little_endian == 0x04030201
     assert test.default_endian == test.little_endian
 
+    assert b.write(test, endianness_test) == data
+
 def test_conditional():
     conditional_test = [
         ("qux", b.boolean),
@@ -234,24 +233,35 @@ def test_conditional():
         })
     ]
 
-    true_test = b.parse(bytearray([0b11001000]), conditional_test)
+    true_data = bytearray([0b11001000])
+
+    true_test = b.parse(true_data, conditional_test)
     assert true_test.qux == True
     assert hasattr(true_test, "frooz")
     assert not hasattr(true_test, "fooz")
     assert true_test.frooz == 0b1001
 
-    false_test = b.parse(bytearray([0b01001000, 0b10000000]), conditional_test)
+    assert b.write(true_test, conditional_test) == true_data
+
+    false_data = bytearray([0b01001000, 0b10000000])
+
+    false_test = b.parse(false_data, conditional_test)
     assert false_test.qux == False
     assert hasattr(false_test, "fooz")
     assert not hasattr(false_test, "frooz")
     assert false_test.fooz == 0b10010001
 
+    assert b.write(false_test, conditional_test) == false_data
+
 def test_str():
     str_test = [("msg", b.string(5))]
 
-    result = b.parse(bytearray([0x68, 0x65, 0x6c, 0x6c, 0x6f]), str_test)
+    data = bytearray([0x68, 0x65, 0x6c, 0x6c, 0x6f])
+    result = b.parse(data, str_test)
 
     assert result.msg == "hello"
+
+    assert b.write(result, str_test) == data
 
 def test_enum():
     enum_test = [
@@ -263,9 +273,11 @@ def test_enum():
         }))]
 
     for value, suit in zip(range(4), ["diamonds", "hearts", "spades", "clubs"]):
-        result = b.parse(bytearray([value]), enum_test)
+        data = bytearray([value])
+        result = b.parse(data, enum_test)
 
         assert result.suit == suit
+        assert b.write(result, enum_test) == data
 
 def test_conditional_on_non_integer_enum():
     enum_test = [
@@ -289,12 +301,16 @@ def test_conditional_on_non_integer_enum():
     assert pulse.instrument_type == "pulse"
     assert pulse.pulse_foo == 19
 
+    assert b.write(pulse, enum_test) == pulse_test
+
     wave_test = bytearray([1, 65])
 
     wave = b.parse(wave_test, enum_test)
 
     assert wave.instrument_type == "wave"
     assert wave.wave_foo == 65
+
+    assert b.write(wave, enum_test) == wave_test
 
     kit_test = bytearray([2, 9])
 
@@ -303,12 +319,16 @@ def test_conditional_on_non_integer_enum():
     assert kit.instrument_type == "kit"
     assert kit.kit_foo == 9
 
+    assert b.write(kit, enum_test) == kit_test
+
     noise_test = bytearray([3, 17])
 
     noise = b.parse(noise_test, enum_test)
 
     assert noise.instrument_type == "noise"
     assert noise.noise_foo == 17
+
+    assert b.write(noise, enum_test) == noise_test
 
 def test_non_powers_of_eight_intX():
     intX_test = [
@@ -327,3 +347,5 @@ def test_non_powers_of_eight_intX():
     assert result.unsigned_14b == 0b10101000110101
     assert result.signed_20b == - 0b101010000101011101
     assert result.signed_4b == 0b0101
+
+    assert b.write(result, intX_test) == in_bytes
