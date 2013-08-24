@@ -10,7 +10,7 @@ An example of parsing files: ::
 
       format_spec = [...]
 
-      with open('raw_file.bin', 'r') as fp:
+      with open('raw_file.bin', 'rb') as fp:
           parsed_obj = b.parse(fp, format_spec)
 
 
