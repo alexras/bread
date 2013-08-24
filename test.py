@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import struct, sys, pprint, unittest, itertools
+import struct, sys, pprint, unittest, itertools, tempfile, os
 
 import bread as b
 
@@ -349,3 +349,38 @@ def test_non_powers_of_eight_intX():
     assert result.signed_4b == 0b0101
 
     assert b.write(result, intX_test) == in_bytes
+
+def test_read_modify_write():
+    data = bytearray(range(36))
+
+    supernested_test = b.parse(data, deeply_nested_struct)
+
+    assert supernested_test.ubermatrix[1].matrix[2][1] == 19
+
+    supernested_test.ubermatrix[1].matrix[2][1] = 42
+
+    written_data = b.write(supernested_test, deeply_nested_struct)
+
+    re_read_data = b.parse(written_data, deeply_nested_struct)
+
+    assert re_read_data.ubermatrix[1].matrix[2][1] == 42
+
+def test_file_io():
+    data = bytearray(range(36))
+
+    supernested_test = b.parse(data, deeply_nested_struct)
+
+    (handle, file_path) = tempfile.mkstemp()
+
+    try:
+        b.write(supernested_test, deeply_nested_struct, filename=file_path)
+
+        with open(file_path, 'rb') as fp:
+            supernested_test_from_file = b.parse(fp, deeply_nested_struct)
+
+        for i,j,k in itertools.product(xrange(3), xrange(3), xrange(3)):
+            assert (supernested_test_from_file.ubermatrix[i].matrix[j][k] ==
+                    supernested_test.ubermatrix[i].matrix[j][k])
+    finally:
+        os.close(handle)
+        os.unlink(file_path)
