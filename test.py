@@ -228,28 +228,30 @@ def test_conditional():
     conditional_test = [
         ("qux", b.boolean),
         (b.CONDITIONAL, "qux", {
-            False: [("fooz", b.byte)],
-            True: [("frooz", b.nibble)]
+            False: [("fooz", b.byte), ("barz", b.byte)],
+            True: [("frooz", b.nibble), ("quxz", b.byte)]
         })
     ]
 
-    true_data = bytearray([0b11001000])
+    true_data = bytearray([0b11001010, 0b11101000])
 
     true_test = b.parse(true_data, conditional_test)
     assert true_test.qux == True
     assert hasattr(true_test, "frooz")
     assert not hasattr(true_test, "fooz")
     assert true_test.frooz == 0b1001
+    assert true_test.quxz == 0b01011101
 
     assert b.write(true_test, conditional_test) == true_data
 
-    false_data = bytearray([0b01001000, 0b10000000])
+    false_data = bytearray([0b01001000, 0b10000000, 0b10000000])
 
     false_test = b.parse(false_data, conditional_test)
     assert false_test.qux == False
     assert hasattr(false_test, "fooz")
     assert not hasattr(false_test, "frooz")
     assert false_test.fooz == 0b10010001
+    assert false_test.barz == 1
 
     assert b.write(false_test, conditional_test) == false_data
 

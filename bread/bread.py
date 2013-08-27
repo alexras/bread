@@ -103,7 +103,9 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
             conditional_field_name, conditional_clauses, spec_deque):
         conditional_val = parsed_dict[conditional_field_name]
         condition_spec = conditional_clauses[conditional_val]
-        spec_deque.extendleft(condition_spec)
+
+        for spec_item in reversed(condition_spec):
+            spec_deque.appendleft(spec_item)
 
     process_spec(spec, handle_function, handle_field, handle_conditional)
 
@@ -150,7 +152,9 @@ def write_from_parsed(obj, spec, **kwargs):
             conditional_field_name, conditional_clauses, spec_deque):
         conditional_val = getattr(obj, conditional_field_name)
         condition_spec = conditional_clauses[conditional_val]
-        spec_deque.extendleft(condition_spec)
+
+        for spec_item in reversed(condition_spec):
+            spec_deque.appendleft(spec_item)
 
     process_spec(spec, handle_function, handle_field, handle_conditional)
 
