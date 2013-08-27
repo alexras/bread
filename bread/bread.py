@@ -33,11 +33,19 @@ def process_spec(spec, handle_function, handle_field, handle_conditional):
         elif isinstance(spec_line, types.FunctionType):
             # If the spec contains a function, that function should be applied
             # to the input stream (this is typically done to parse padding bits)
-            handle_function(spec_line, global_options)
+            try:
+                handle_function(spec_line, global_options)
+            except Exception, e:
+                print "Error while processing %s: %s" % (spec_line, e)
+                raise e
         elif len(spec_line) == 1:
             # Spec lines of length 1 are assumed to be functions, which are
             # treated the same as before
-            handle_function(spec_line[0], global_options)
+            try:
+                handle_function(spec_line[0], global_options)
+            except Exception, e:
+                print "Error while processing %s: %s" % (spec_line, e)
+                raise e
         elif spec_line[0] == CONDITIONAL:
             # Push appropriate conditional spec on the front of the current
             # one so that it will be evaluated next
@@ -53,7 +61,12 @@ def process_spec(spec, handle_function, handle_field, handle_conditional):
                 options = global_options.copy()
                 options.update(spec_line[2])
 
-            handle_field(field_name, parse_function, options)
+            try:
+                handle_field(field_name, parse_function, options)
+            except Exception, e:
+                print "Error while processing field '%s': %s" % (
+                    field_name, e)
+                raise e
 
 def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
     offsets = {}
