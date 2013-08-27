@@ -12,6 +12,8 @@ WRITE = 1
 def parse(data_source, spec, type_name='bread_struct'):
     if type(data_source) == str:
         reader = ConstBitStream(bytes=data_source)
+    elif type(data_source) == list:
+        reader = ConstBitStream(bytes=data_source)
     else:
         reader = ConstBitStream(data_source)
 
