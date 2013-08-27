@@ -57,8 +57,10 @@ Booleans
 Enumerations
 ~~~~~~~~~~~~
 
-``enum(length, values)`` - the next ``length`` bits represent one of a set of
-values, whose values are given by the dictionary ``values``.
+``enum(length, values, default=None)`` - the next ``length`` bits represent one
+of a set of values, whose values are given by the dictionary ``values``. If
+``default`` is specified, it will be returned if the bits do not correspond to
+any value in ``values``. Otherwise, it raises a ``ValueError``.
 
 Here is an example of a 2-bit field representing a card suit: ::
 

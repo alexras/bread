@@ -281,6 +281,33 @@ def test_enum():
         assert result.suit == suit
         assert b.write(result, enum_test) == data
 
+    try:
+        data = bytearray([42])
+        result = b.parse(data, enum_test)
+        assert False, "Failed to throw an error"
+    except ValueError, e:
+        # expected
+        pass
+
+def test_enum_default():
+    enum_test = [
+        ("suit", b.enum(8, {
+            0: "diamonds",
+            1: "hearts",
+            2: "spades",
+            3: "clubs"
+        }, default="joker"))]
+
+    data = bytearray([42])
+    result = b.parse(data, enum_test)
+
+    assert result.suit == "joker"
+
+    data = bytearray([2])
+    result = b.parse(data, enum_test)
+
+    assert result.suit == "spades"
+
 def test_conditional_on_non_integer_enum():
     enum_test = [
         ("instrument_type", b.enum(8, {

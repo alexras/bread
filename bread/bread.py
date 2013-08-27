@@ -258,13 +258,21 @@ def padding(length):
 
     return field_descriptor(pad_parser, pad_writer, length)
 
-def enum(length, values):
+def enum(length, values, default=None):
     subparser = intX(length=length, signed=False)
 
     def parser(reader, **kwargs):
         coded_value = subparser(READ, reader)
 
-        return values[coded_value]
+        if coded_value not in values:
+            if default is not None:
+                return default
+            else:
+                raise ValueError(
+                    "Value '%s' does not correspond to a valid enum value" %
+                    (coded_value))
+        else:
+            return values[coded_value]
 
     def writer(value, **kwargs):
         for coded_value in values:
