@@ -188,7 +188,7 @@ def write(parsed_obj, spec, filename=None):
         with open(filename, 'wb') as fp:
             fp.write(output_data)
     else:
-        return output_data
+        return bytearray(output_data)
 
 def field_descriptor(read_fn, write_fn, length):
     # For reads, 'target' is a reader. For writes, it's a value to write.
