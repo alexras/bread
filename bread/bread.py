@@ -109,29 +109,50 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
 
     process_spec(spec, handle_function, handle_field, handle_conditional)
 
-    parsed_dict["__offsets__"] = type('bread_struct_offsets', (object, ),
-                                      offsets)
+    class bread_struct_offsets(object):
+        def __eq__(self, other):
+            return self.__dict__ == other.__dict__
+
+        def __ne__(self, other):
+            return not self.__eq__(other)
+
+    offsets_obj = bread_struct_offsets()
+
+    for key, value in offsets.items():
+        setattr(offsets_obj, key, value)
+
+    parsed_dict["__offsets__"] = offsets_obj
     parsed_dict["_LENGTH"] = reader.pos - start_reader_offset
 
-    def my_length(self):
-        return self._LENGTH
+    class NewStruct(object):
+        def __eq__(self, other):
+            return self.__dict__ == other.__dict__
 
-    def my_print(self):
-        string = ""
+        def __ne__(self, other):
+            return not self.__eq__(other)
 
-        for key, formatter in keys:
-            string += "%s: %s\n" % (key, formatter(getattr(self, key)))
+        def __len__(self):
+            return self._LENGTH
 
-        return string
+        def __str__(self):
+            string = ""
 
-    parsed_type = type(type_name, (object,), parsed_dict)
+            for key, formatter in keys:
+                string += "%s: %s\n" % (key, formatter(getattr(self, key)))
 
-    parsed_type.__len__ = types.MethodType(
-        my_length, parsed_type, parsed_type.__class__)
-    parsed_type.__str__ = types.MethodType(
-        my_print, parsed_type, parsed_type.__class__)
+            return string
 
-    return parsed_type()
+        def __getattr__(self, name):
+            raise ValueError("No known field '%s'" % (name))
+
+    NewStruct.__name__ = type_name
+
+    instance = NewStruct()
+
+    for key, value in parsed_dict.items():
+        setattr(instance, key, value)
+
+    return instance
 
 def write_from_parsed(obj, spec, **kwargs):
     output_data = BitArray()

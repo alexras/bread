@@ -413,3 +413,18 @@ def test_file_io():
     finally:
         os.close(handle)
         os.unlink(file_path)
+
+def test_comparison():
+    data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
+    obj_1 = b.parse(data, spec = test_struct)
+    obj_2 = b.parse(data, spec = test_struct)
+
+    assert obj_1 == obj_2
+
+    obj_2.flag_four = not obj_1.flag_four
+
+    assert obj_1 != obj_2
+
+    obj_2.flag_four = obj_1.flag_four
+
+    assert obj_1 == obj_2
