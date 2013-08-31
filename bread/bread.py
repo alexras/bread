@@ -225,13 +225,13 @@ def intX(length, signed = False):
     def integer_type_read(reader, endianness = LITTLE_ENDIAN, offset = 0,
                           **kwargs):
         format_string = _gen_format_string(endianness)
-        return reader.read(format_string)
+        return reader.read(format_string) + offset
 
     def integer_type_write(val, endianness = LITTLE_ENDIAN,
                            offset = 0, **kwargs):
         format_string = _gen_format_string(endianness)
 
-        return pack(format_string, val)
+        return pack(format_string, val - offset)
 
     return field_descriptor(integer_type_read, integer_type_write, length)
 

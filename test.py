@@ -33,6 +33,10 @@ simple_struct = [
     ("ok", b.boolean)
 ]
 
+offset_struct = [
+    ("length", b.uint8, {"offset": 1})
+]
+
 deeply_nested_struct = [
     {"endianness" : b.BIG_ENDIAN},
     ("ubermatrix", b.array(3, nested_array_struct)),
@@ -393,6 +397,21 @@ def test_read_modify_write():
     re_read_data = b.parse(written_data, deeply_nested_struct)
 
     assert re_read_data.ubermatrix[1].matrix[2][1] == 42
+
+def test_read_modify_write_with_offset():
+    data = bytearray([4])
+
+    parsed = b.parse(data, offset_struct)
+    assert parsed.length == 5
+
+    output = b.write(parsed, offset_struct)
+    assert output == data
+
+    parsed.length = 10
+
+    output = b.write(parsed, offset_struct)
+
+    assert output[0] == 9
 
 def test_file_io():
     data = bytearray(range(36))
