@@ -25,3 +25,10 @@ An example with byte arrays and strings: ::
 
      parsed_bytes = b.parse(bytes, format_spec)
      parsed_string = b.parse(string, format_spec)
+
+Parsed Object Methods
+---------------------
+
+Objects produced by bread can produce JSON representations of
+themselves. Calling the object's ``as_json()`` method will produce its data as
+a JSON string.

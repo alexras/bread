@@ -1,4 +1,4 @@
-import StringIO, types, struct, collections, functools
+import StringIO, types, struct, collections, functools, json
 from bitstring import ConstBitStream, BitArray, pack
 
 LITTLE_ENDIAN = 0
@@ -135,15 +135,42 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
             return self._LENGTH
 
         def __str__(self):
-            string = ""
+            string = "\n"
 
             for key, formatter in keys:
                 string += "%s: %s\n" % (key, formatter(getattr(self, key)))
 
             return string
 
+        def __repr__(self):
+            return self.__str__()
+
         def __getattr__(self, name):
             raise ValueError("No known field '%s'" % (name))
+
+        def as_json(self):
+            out_json = self.__json_repr()
+
+            return json.dumps(out_json)
+
+        def __element_json_repr(self, element):
+            if hasattr(element, "__baked_by_bread__"):
+                return element.__json_repr()
+            else:
+                return element
+
+        def __json_repr(self):
+            out_json = {}
+
+            for key, formatter in keys:
+                val = getattr(self, key)
+
+                if isinstance(val, list):
+                    out_json[key] = map(self.__element_json_repr, val)
+                else:
+                    out_json[key] = self.__element_json_repr(val)
+
+            return out_json
 
     NewStruct.__name__ = type_name
 
@@ -151,6 +178,9 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
 
     for key, value in parsed_dict.items():
         setattr(instance, key, value)
+
+    # Set an internal attribute so that we know this struct was made by bread
+    setattr(instance, "__baked_by_bread__", True)
 
     return instance
 

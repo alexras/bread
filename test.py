@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import struct, sys, pprint, unittest, itertools, tempfile, os
+import struct, sys, pprint, unittest, itertools, tempfile, os, json
 
 import bread as b
 
@@ -73,6 +73,20 @@ def test_simple_struct():
     output_data = b.write(test, test_struct)
 
     assert output_data == data
+
+    expected_json_struct = {
+        "flag_one" : True,
+        "flag_two" : False,
+        "flag_three" : True,
+        "flag_four" : False,
+        "first" : 0xfb,
+        "blah" : 0xdddd,
+        "second" : -57,
+        "third" : 90,
+        "fourth" : 0
+    }
+
+    assert json.loads(test.as_json()) == expected_json_struct
 
 def test_updates_do_not_leak():
     data = struct.pack(">IqQb", 0xafb3dddd, -57, 90, 0)
@@ -162,6 +176,14 @@ def test_nested_array():
 
     assert b.write(nested_test, nested_array_struct) == data
 
+    expected_json_struct = {
+        "first" : 42,
+        "matrix" : [[0, 1, 2], [3, 4, 5], [6, 7, 8]],
+        "last" : 0xdb
+    }
+
+    assert json.loads(nested_test.as_json()) == expected_json_struct
+
 def test_nested_struct():
     data = bytearray(range(36))
 
@@ -193,6 +215,33 @@ def test_nested_struct():
 
     assert (b.write(supernested_test, deeply_nested_struct) ==
             bytearray(range(34) + [0b0]))
+
+    expected_json_struct = {
+        "dummy" : {
+            "length" : 33,
+            "ok" : False
+        },
+        "ubermatrix" : [
+            {
+                "first" : 0,
+                "matrix": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+                "last" : 10
+            },
+            {
+                "first" : 11,
+                "matrix": [[12, 13, 14], [15, 16, 17], [18, 19, 20]],
+                "last" : 21
+            },
+            {
+                "first" : 22,
+                "matrix": [[23, 24, 25], [26, 27, 28], [29, 30, 31]],
+                "last" : 32
+            }
+        ]
+    }
+
+    assert json.loads(supernested_test.as_json()) == expected_json_struct
+
 
 def test_single_byte_fields():
     single_byte_fields_struct = [
@@ -240,6 +289,7 @@ def test_conditional():
     true_data = bytearray([0b11001010, 0b11101000])
 
     true_test = b.parse(true_data, conditional_test)
+
     assert true_test.qux == True
     assert hasattr(true_test, "frooz")
     assert not hasattr(true_test, "fooz")
