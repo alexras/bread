@@ -185,19 +185,29 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
     return instance
 
 def write_from_parsed(obj, spec, **kwargs):
-    output_data = BitArray()
+    output_format_string_pieces = []
+    output_values = []
+
+    def add_to_output(partial_output):
+        format_string_pieces, values = partial_output
+        output_format_string_pieces.extend(format_string_pieces)
+        output_values.extend(values)
 
     def handle_function(parse_function, options):
-        output_data.append(parse_function(WRITE, None, **options))
+        add_to_output(parse_function(WRITE, None, **options))
 
     def handle_field(field_name, parse_function, options):
         field_value = getattr(obj, field_name)
 
         if type(parse_function) == list:
-            output_data.append(
-                write_from_parsed(field_value, parse_function, **options))
+            field_output = write_from_parsed(
+                field_value, parse_function, **options)
+
+            add_to_output(field_output)
         else:
-            output_data.append(parse_function(WRITE, field_value, **options))
+            field_output = parse_function(WRITE, field_value, **options)
+
+            add_to_output(field_output)
 
     def handle_conditional(
             conditional_field_name, conditional_clauses, spec_deque):
@@ -209,10 +219,15 @@ def write_from_parsed(obj, spec, **kwargs):
 
     process_spec(spec, handle_function, handle_field, handle_conditional)
 
-    return output_data
+    return output_format_string_pieces, output_values
 
 def write(parsed_obj, spec, filename=None):
-    output_data = write_from_parsed(parsed_obj, spec).tobytes()
+    pack_string_pieces, output_values = write_from_parsed(parsed_obj, spec)
+
+    print pack_string_pieces, output_values
+
+    output_data = pack(', '.join(pack_string_pieces),
+                       *output_values).tobytes()
 
     if filename is not None:
         with open(filename, 'wb') as fp:
@@ -230,7 +245,7 @@ def field_descriptor(read_fn, write_fn, length):
                 assert length is not None, (
                     "Field is null, but I can't determine its length for "
                     "padding")
-                return pack('pad:%d' % (length))
+                return (['pad:%d' % (length)], [])
             else:
                 return write_fn(_target, **kwargs)
 
@@ -252,16 +267,18 @@ def intX(length, signed = False):
         format_string += ':%d' % (length)
         return format_string
 
+    format_strings = {
+        LITTLE_ENDIAN: _gen_format_string(LITTLE_ENDIAN),
+        BIG_ENDIAN: _gen_format_string(BIG_ENDIAN)
+    }
+
     def integer_type_read(reader, endianness = LITTLE_ENDIAN, offset = 0,
                           **kwargs):
-        format_string = _gen_format_string(endianness)
-        return reader.read(format_string) + offset
+        return reader.read(format_strings[endianness]) + offset
 
     def integer_type_write(val, endianness = LITTLE_ENDIAN,
                            offset = 0, **kwargs):
-        format_string = _gen_format_string(endianness)
-
-        return pack(format_string, val - offset)
+        return ([format_strings[endianness]], [val - offset])
 
     return field_descriptor(integer_type_read, integer_type_write, length)
 
@@ -286,7 +303,7 @@ def string(length, **kwargs):
             "%ds" % (length), reader.read(string_length).tobytes())[0]
 
     def string_writer(value, **kwargs):
-        return pack("bytes:%d" % (length), value)
+        return (["bytes:%d" % (length)], [value])
 
     return field_descriptor(string_parser, string_writer, length * 8)
 
@@ -294,7 +311,7 @@ def _boolean_reader(reader, **kwargs):
     return reader.read(1).bool
 
 def _boolean_writer(value, **kwargs):
-    return pack('bool', value)
+    return (['bool'], [value])
 
 boolean = field_descriptor(_boolean_reader, _boolean_writer, 1)
 
@@ -305,7 +322,7 @@ def padding(length):
         return None
 
     def pad_writer(value, **kwargs):
-        return pack("pad:%n" % (length))
+        return (["pad:%n" % (length)], [])
 
     return field_descriptor(pad_parser, pad_writer, length)
 
@@ -355,7 +372,8 @@ def array(length, substruct):
         return substructs
 
     def writer(values, **kwargs):
-        total_bitstr = BitArray()
+        format_string_pieces = []
+        data_values = []
 
         for value in values:
             if type(substruct) == list:
@@ -365,9 +383,12 @@ def array(length, substruct):
                 subparse_function = functools.partial(
                     substruct, _operation=WRITE, _target=value)
 
-            total_bitstr = total_bitstr + subparse_function(**kwargs)
+            subparse_pieces, subparse_values = subparse_function(**kwargs)
 
-        return total_bitstr
+            format_string_pieces.extend(subparse_pieces)
+            data_values.extend(subparse_values)
+
+        return (format_string_pieces, data_values)
 
     # Returning None for length, since we can't know what the length is going
     # to be without looking ahead
