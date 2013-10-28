@@ -4,6 +4,19 @@ import struct, sys, pprint, unittest, itertools, tempfile, os, json
 
 import bread as b
 
+def test_compress_format_string():
+    assert b.compress_format_string(['<B', '<B', '<B', '>h']) == ['<3B', '>h']
+    assert b.compress_format_string(['>h', '<B', '<B', '<B']) == ['>h', '<3B']
+    assert (b.compress_format_string(['<B', '>h', '<B', '<B']) ==
+            ['<B', '>h', '<2B'])
+
+    assert (b.compress_format_string(['<3B', '<2B', '<5B', '>h']) ==
+            ['<10B', '>h'])
+
+    uncompressible = ['intle:21', 'intle:21', 'intle:21', '<B', 'intle:21']
+
+    assert b.compress_format_string(uncompressible) == uncompressible
+
 # Shared structs for bread struct test
 
 test_struct = [

@@ -5,6 +5,13 @@ LITTLE_ENDIAN = 0
 BIG_ENDIAN = 1
 CONDITIONAL = 2
 
+COMPACT_FORMAT_STRINGS = {
+    8: 'b',
+    16: 'h',
+    32: 'l',
+    64: 'q'
+}
+
 # Enumeration of different operations that field descriptors can perform
 READ = 0
 WRITE = 1
@@ -224,8 +231,6 @@ def write_from_parsed(obj, spec, **kwargs):
 def write(parsed_obj, spec, filename=None):
     pack_string_pieces, output_values = write_from_parsed(parsed_obj, spec)
 
-    print pack_string_pieces, output_values
-
     output_data = pack(', '.join(pack_string_pieces),
                        *output_values).tobytes()
 
@@ -253,18 +258,32 @@ def field_descriptor(read_fn, write_fn, length):
 
 def intX(length, signed = False):
     def _gen_format_string(endianness):
-        if signed:
-            format_string = 'int'
-        else:
-            format_string = 'uint'
-
-        if length % 8 == 0:
+        if length in COMPACT_FORMAT_STRINGS:
             if endianness == LITTLE_ENDIAN:
-                format_string += 'le'
+                format_string = '<'
             else:
-                format_string += 'be'
+                format_string = '>'
 
-        format_string += ':%d' % (length)
+            format_character = COMPACT_FORMAT_STRINGS[length]
+
+            if not signed:
+                format_character = format_character.upper()
+
+            format_string += format_character
+        else:
+            if signed:
+                format_string = 'int'
+            else:
+                format_string = 'uint'
+
+            if length % 8 == 0:
+                if endianness == LITTLE_ENDIAN:
+                    format_string += 'le'
+                else:
+                    format_string += 'be'
+
+            format_string += ':%d' % (length)
+
         return format_string
 
     format_strings = {
@@ -388,8 +407,50 @@ def array(length, substruct):
             format_string_pieces.extend(subparse_pieces)
             data_values.extend(subparse_values)
 
+        format_string_pieces = compress_format_string(format_string_pieces)
+
         return (format_string_pieces, data_values)
 
     # Returning None for length, since we can't know what the length is going
     # to be without looking ahead
     return field_descriptor(parser, writer, None)
+
+def _append_compressed_piece(piece, count, compressed_pieces):
+    if piece[0] in ('<', '>'):
+        if count > 1:
+            compressed_pieces.append(piece[0] + str(count) + piece[-1])
+        else:
+            compressed_pieces.append(piece)
+    else:
+        for i in xrange(count):
+            compressed_pieces.append(piece)
+
+
+def compress_format_string(pieces):
+    prev_piece = None
+    prev_count = 0
+
+    compressed_pieces = []
+
+    for piece in pieces:
+        if piece[0] in ('<', '>') and len(piece) > 2:
+            cur_piece = piece[0] + piece[-1]
+            cur_count = int(piece[1:-1])
+        else:
+            cur_piece = piece
+            cur_count = 1
+
+        if cur_piece == prev_piece:
+            prev_count += cur_count
+        else:
+            if prev_piece is not None:
+                _append_compressed_piece(
+                    prev_piece, prev_count, compressed_pieces)
+
+            prev_piece = cur_piece
+            prev_count = cur_count
+
+    if prev_piece is not None:
+        _append_compressed_piece(prev_piece, prev_count, compressed_pieces)
+
+    return compressed_pieces
