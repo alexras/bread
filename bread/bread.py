@@ -1,5 +1,5 @@
 import StringIO, types, struct, collections, functools, json
-from bitstring import ConstBitStream, BitArray, pack
+from bitstring import ConstBitStream, pack
 
 LITTLE_ENDIAN = 0
 BIG_ENDIAN = 1
@@ -11,6 +11,113 @@ COMPACT_FORMAT_STRINGS = {
     32: 'l',
     64: 'q'
 }
+
+KEEP_LEFT = [
+    0b00000000,
+    0b10000000,
+    0b11000000,
+    0b11100000,
+    0b11110000,
+    0b11111000,
+    0b11111100,
+    0b11111110,
+    0b11111111]
+
+KEEP_RIGHT = [
+    0b00000000,
+    0b00000001,
+    0b00000011,
+    0b00000111,
+    0b00001111,
+    0b00011111,
+    0b00111111,
+    0b01111111,
+    0b11111111]
+
+def mask(x, offset, length):
+    """
+    Masks off a portion of the byte starting at `offset` and extending for
+    `length` bits.
+    """
+    return (x & KEEP_RIGHT[8 - offset]) & KEEP_LEFT[min(offset + length, 8)]
+
+def rightshift(bytelist, length, offset):
+    """
+    Shift every byte in `bytelist` to the right by `offset` and return the
+    new bytelist as a bytearray.
+    """
+    prev_byte = None
+
+    # Only return the bytes that actually contain data (to avoid returning
+    # extra 0 bytes unnecessarily)
+    bytes_to_keep = 0
+
+    shifted_bytes = []
+
+    # Handle the easier base-cases (more than a whole byte of shift, or no
+    # shift at all)
+    while offset >= 8:
+        shifted_bytes.append(0)
+        offset -= 8
+        bytes_to_keep += 1
+
+    # Round up to the nearest byte
+    bytes_to_keep += (offset + length + 7) / 8
+
+    if offset == 0:
+        shifted_bytes.extend(bytelist)
+        return shifted_bytes
+
+    next_byte = 0
+
+    for b in bytelist:
+        first_bits = mask(b, 0, 8 - offset)
+        last_bits = mask(b, 8 - offset, offset)
+
+        shifted_bytes.append( (first_bits >> offset) | next_byte)
+        next_byte = last_bits << (8 - offset)
+
+    shifted_bytes.append(next_byte)
+
+    return shifted_bytes[:bytes_to_keep]
+
+class BitwiseWriter(object):
+    def __init__(self, stream):
+        self.bits_written = 0
+        self.last_byte = 0b00000000
+        self.fp = stream
+
+    def write(self, data, length_in_bits):
+        if len(data) == 0:
+            return
+
+        # If we've got some bits left over from the last write, we'll need to
+        # shift the data over and push those last bits into the front of the
+        # write stream
+        right_shift_amt = self.bits_written % 8
+
+        if right_shift_amt > 0:
+            shifted_data = rightshift(data, length_in_bits, right_shift_amt)
+            shifted_data[0] = shifted_data[0] | self.last_byte
+        else:
+            shifted_data = data
+
+        leftover_bits = (self.bits_written + length_in_bits) % 8
+
+        # If data doesn't end on a clean byte boundary,
+        if leftover_bits != 0:
+            self.last_byte = shifted_data.pop()
+
+        if len(shifted_data) > 0:
+            self.fp.write(shifted_data)
+
+        self.bits_written += length_in_bits
+
+    def close(self):
+        if self.bits_written % 8 != 0:
+            self.fp.write(self.last_byte)
+
+        self.fp.close()
 
 # Enumeration of different operations that field descriptors can perform
 READ = 0

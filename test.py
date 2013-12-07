@@ -2,7 +2,70 @@
 
 import struct, sys, pprint, unittest, itertools, tempfile, os, json
 
+from nose.tools import assert_equal
+
 import bread as b
+
+def test_mask():
+    for offset in xrange(8):
+        for length in xrange(8 - offset):
+            expected = (2 ** length - 1) << max(8 - offset - length, 0)
+
+            assert_equal(b.mask(0b11111111, offset, length), expected)
+
+def test_rightshift():
+    assert_equal(b.rightshift([0b11111111], 8, 3), [0b00011111, 0b11100000])
+    assert_equal(b.rightshift([0b11111111], 8, 8), [0, 0b11111111])
+    assert_equal(b.rightshift([0b11111111], 8, 0), [0b11111111])
+    assert_equal(b.rightshift([0b11111111], 8, 11), [0, 0b00011111, 0b11100000])
+    assert_equal(b.rightshift([0b10000000], 1, 1), [0b01000000])
+    assert_equal(b.rightshift([0b10000000], 1, 7), [0b00000001])
+
+    assert_equal(b.rightshift([0b10101010, 0b01101101, 0b11011010], 24, 3),
+                 [0b00010101, 0b01001101, 0b10111011, 0b01000000])
+
+class ByteBufferStream(object):
+    def __init__(self):
+        self.l = []
+
+    def write(self, x):
+        if type(x) == list:
+            self.l.extend(x)
+        else:
+            self.l.append(x)
+
+    def close(self):
+        pass
+
+def test_write_ones():
+    s = ByteBufferStream()
+    writer = b.BitwiseWriter(s)
+
+    writer.write([0b11111000], 5)
+    writer.write([0b11111100], 6)
+    writer.write([0b11111111], 8)
+
+    writer.close()
+
+    assert_equal(s.l, [0b11111111, 0b11111111, 0b11100000])
+
+def test_write_single_byte():
+    s = ByteBufferStream()
+    writer = b.BitwiseWriter(s)
+
+    writer.write([0b10000000], 1)
+    writer.write([0], 1)
+    writer.write([0b10000000], 1)
+    writer.write([0b10000000], 1)
+    writer.write([0], 1)
+    writer.write([0b10000000], 1)
+    writer.write([0], 1)
+    writer.write([0b10000000], 1)
+
+    writer.close()
+
+    print "FINAL", map(bin, s.l)
+    assert_equal(s.l, [0b10110101])
 
 def test_compress_format_string():
     assert b.compress_format_string(['<B', '<B', '<B', '>h']) == ['<3B', '>h']
