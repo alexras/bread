@@ -88,6 +88,8 @@ class BitwiseWriter(object):
         self.fp = stream
 
     def write(self, data, length_in_bits):
+        assert len(data) == (length_in_bits + 7) / 8
+
         if len(data) == 0:
             return
 
@@ -118,6 +120,19 @@ class BitwiseWriter(object):
             self.fp.write(self.last_byte)
 
         self.fp.close()
+
+class ByteArrayStream(object):
+    def __init__(self):
+        self.array = bytearray()
+
+    def write(self, x):
+        if type(x) in [list, bytearray]:
+            self.array.extend(x)
+        else:
+            self.array.append(x)
+
+    def close(self):
+        pass
 
 # Enumeration of different operations that field descriptors can perform
 READ = 0
@@ -193,7 +208,7 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
     start_reader_offset = reader.pos
 
     def handle_function(parse_function, options):
-        parse_function(READ, reader, **options)
+        parse_function(READ, reader, None, **options)
 
     def handle_field(field_name, parse_function, options):
         if "str_format" in options:
@@ -208,7 +223,7 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
         if type(parse_function) == list:
             val = parse_from_reader(reader, parse_function, **options)
         else:
-            val = parse_function(READ, reader, **options)
+            val = parse_function(READ, reader, None, **options)
 
         if val is not None:
             parsed_dict[field_name] = val
@@ -298,30 +313,17 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
 
     return instance
 
-def write_from_parsed(obj, spec, **kwargs):
-    output_format_string_pieces = []
-    output_values = []
-
-    def add_to_output(partial_output):
-        format_string_pieces, values = partial_output
-        output_format_string_pieces.extend(format_string_pieces)
-        output_values.extend(values)
-
+def write_from_parsed(writer, obj, spec, **kwargs):
     def handle_function(parse_function, options):
-        add_to_output(parse_function(WRITE, None, **options))
+        parse_function(WRITE, writer, None, **options)
 
     def handle_field(field_name, parse_function, options):
         field_value = getattr(obj, field_name)
 
         if type(parse_function) == list:
-            field_output = write_from_parsed(
-                field_value, parse_function, **options)
-
-            add_to_output(field_output)
+            write_from_parsed(writer, field_value, parse_function, **options)
         else:
-            field_output = parse_function(WRITE, field_value, **options)
-
-            add_to_output(field_output)
+            parse_function(WRITE, writer, field_value, **options)
 
     def handle_conditional(
             conditional_field_name, conditional_clauses, spec_deque):
@@ -333,33 +335,34 @@ def write_from_parsed(obj, spec, **kwargs):
 
     process_spec(spec, handle_function, handle_field, handle_conditional)
 
-    return output_format_string_pieces, output_values
-
 def write(parsed_obj, spec, filename=None):
-    pack_string_pieces, output_values = write_from_parsed(parsed_obj, spec)
-
-    output_data = pack(', '.join(pack_string_pieces),
-                       *output_values).tobytes()
-
     if filename is not None:
-        with open(filename, 'wb') as fp:
-            fp.write(output_data)
+        fp = open(filename, 'wb')
     else:
-        return bytearray(output_data)
+        fp = ByteArrayStream()
+
+    writer = BitwiseWriter(fp)
+
+    write_from_parsed(writer, parsed_obj, spec)
+    writer.close()
+
+    if filename is None:
+        return fp.array
 
 def field_descriptor(read_fn, write_fn, length):
-    # For reads, 'target' is a reader. For writes, it's a value to write.
-    def catchall_fn(_operation, _target, **kwargs):
+    # For reads, 'target' is a reader and 'data' is None. For writes, 'target'
+    # is a writer and 'data' is the value to write.
+    def catchall_fn(_operation, _target, _data, **kwargs):
         if _operation == READ:
             return read_fn(_target, **kwargs)
         elif _operation == WRITE:
-            if _target is None:
+            if _data is None:
                 assert length is not None, (
                     "Field is null, but I can't determine its length for "
                     "padding")
-                return (['pad:%d' % (length)], [])
+                return make_pad_writer(length)(_target, _data)
             else:
-                return write_fn(_target, **kwargs)
+                return write_fn(_target, _data, **kwargs)
 
     return catchall_fn
 
@@ -428,18 +431,29 @@ def string(length, **kwargs):
         return struct.unpack(
             "%ds" % (length), reader.read(string_length).tobytes())[0]
 
-    def string_writer(value, **kwargs):
-        return (["bytes:%d" % (length)], [value])
+    def string_writer(writer, value, **kwargs):
+        writer.write(bytearray(value), string_length)
 
     return field_descriptor(string_parser, string_writer, length * 8)
 
 def _boolean_reader(reader, **kwargs):
     return reader.read(1).bool
 
-def _boolean_writer(value, **kwargs):
-    return (['bool'], [value])
+def _boolean_writer(writer, value, **kwargs):
+    if value:
+        bool_as_int = 0b10000000
+    else:
+        bool_as_int = 0
+
+    writer.write([bool_as_int], 1)
 
 boolean = field_descriptor(_boolean_reader, _boolean_writer, 1)
+
+def make_pad_writer(length):
+    def pad_writer(writer, value, **kwargs):
+        writer.write(bytearray([0] * ((length + 7) / 8)), length)
+
+    return pad_writer
 
 def padding(length):
     def pad_parser(reader, **kwargs):
@@ -447,16 +461,13 @@ def padding(length):
         reader.read(length)
         return None
 
-    def pad_writer(value, **kwargs):
-        return (["pad:%n" % (length)], [])
-
-    return field_descriptor(pad_parser, pad_writer, length)
+    return field_descriptor(pad_parser, make_pad_writer(length), length)
 
 def enum(length, values, default=None):
     subparser = intX(length=length, signed=False)
 
     def parser(reader, **kwargs):
-        coded_value = subparser(READ, reader)
+        coded_value = subparser(READ, reader, None)
 
         if coded_value not in values:
             if default is not None:
@@ -468,12 +479,11 @@ def enum(length, values, default=None):
         else:
             return values[coded_value]
 
-    def writer(value, **kwargs):
+    def writer(writer, value, **kwargs):
         for coded_value in values:
             if values[coded_value] == value:
-                return subparser(WRITE, coded_value)
-
-        return None
+                subparser(WRITE, writer, coded_value)
+                break
 
     return field_descriptor(parser, writer, length)
 
@@ -488,7 +498,7 @@ def array(length, substruct):
             # Passed a parsing function; should just return whatever that thing
             # parses
             subparse_function = functools.partial(
-                substruct, _operation=READ, _target=reader)
+                substruct, _operation=READ, _target=reader, _data=None)
 
         substructs = []
 
@@ -497,26 +507,20 @@ def array(length, substruct):
 
         return substructs
 
-    def writer(values, **kwargs):
+    def writer(writer, values, **kwargs):
         format_string_pieces = []
         data_values = []
 
         for value in values:
             if type(substruct) == list:
                 subparse_function = functools.partial(
-                    write_from_parsed, obj=value, spec=substruct)
+                    write_from_parsed, writer=writer, obj=value, spec=substruct)
             else:
                 subparse_function = functools.partial(
-                    substruct, _operation=WRITE, _target=value)
+                    substruct, _operation=WRITE, _target=writer, _data=value)
 
-            subparse_pieces, subparse_values = subparse_function(**kwargs)
+            subparse_function(**kwargs)
 
-            format_string_pieces.extend(subparse_pieces)
-            data_values.extend(subparse_values)
-
-        format_string_pieces = compress_format_string(format_string_pieces)
-
-        return (format_string_pieces, data_values)
 
     # Returning None for length, since we can't know what the length is going
     # to be without looking ahead
