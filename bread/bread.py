@@ -117,7 +117,7 @@ class BitwiseWriter(object):
 
     def close(self):
         if self.bits_written % 8 != 0:
-            self.fp.write(self.last_byte)
+            self.fp.write(bytearray([self.last_byte]))
 
         self.fp.close()
 
@@ -367,8 +367,10 @@ def field_descriptor(read_fn, write_fn, length):
     return catchall_fn
 
 def intX(length, signed = False):
+    simple_length = length in COMPACT_FORMAT_STRINGS
+
     def _gen_format_string(endianness):
-        if length in COMPACT_FORMAT_STRINGS:
+        if simple_length:
             if endianness == LITTLE_ENDIAN:
                 format_string = '<'
             else:
@@ -405,9 +407,17 @@ def intX(length, signed = False):
                           **kwargs):
         return reader.read(format_strings[endianness]) + offset
 
-    def integer_type_write(val, endianness = LITTLE_ENDIAN,
+    def integer_type_write(writer, val, endianness = LITTLE_ENDIAN,
                            offset = 0, **kwargs):
-        return ([format_strings[endianness]], [val - offset])
+        if simple_length:
+            bytes_to_write = bytearray(
+                struct.pack(format_strings[endianness], val - offset))
+        else:
+            bytes_to_write = bytearray(
+                pack(format_strings[endianness], val - offset).tobytes())
+
+        writer.write(bytes_to_write, length)
+
 
     return field_descriptor(integer_type_read, integer_type_write, length)
 

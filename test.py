@@ -29,7 +29,7 @@ class ByteListStream(object):
         self.l = []
 
     def write(self, x):
-        if type(x) == list:
+        if type(x) in [list, bytearray]:
             self.l.extend(x)
         else:
             self.l.append(x)
