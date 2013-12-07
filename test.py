@@ -24,7 +24,7 @@ def test_rightshift():
     assert_equal(b.rightshift([0b10101010, 0b01101101, 0b11011010], 24, 3),
                  [0b00010101, 0b01001101, 0b10111011, 0b01000000])
 
-class ByteBufferStream(object):
+class ByteListStream(object):
     def __init__(self):
         self.l = []
 
@@ -38,7 +38,7 @@ class ByteBufferStream(object):
         pass
 
 def test_write_ones():
-    s = ByteBufferStream()
+    s = ByteListStream()
     writer = b.BitwiseWriter(s)
 
     writer.write([0b11111000], 5)
@@ -50,7 +50,7 @@ def test_write_ones():
     assert_equal(s.l, [0b11111111, 0b11111111, 0b11100000])
 
 def test_write_single_byte():
-    s = ByteBufferStream()
+    s = ByteListStream()
     writer = b.BitwiseWriter(s)
 
     writer.write([0b10000000], 1)
@@ -372,7 +372,7 @@ def test_conditional():
     assert true_test.frooz == 0b1001
     assert true_test.quxz == 0b01011101
 
-    assert b.write(true_test, conditional_test) == true_data
+    assert_equal(b.write(true_test, conditional_test), true_data)
 
     false_data = bytearray([0b01001000, 0b10000000, 0b10000000])
 
@@ -507,7 +507,7 @@ def test_non_powers_of_eight_intX():
     assert result.signed_20b == - 0b101010000101011101
     assert result.signed_4b == 0b0101
 
-    assert b.write(result, intX_test) == in_bytes
+    assert_equal(b.write(result, intX_test), in_bytes)
 
 def test_read_modify_write():
     data = bytearray(range(36))
