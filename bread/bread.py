@@ -282,6 +282,9 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
 
             return json.dumps(out_json)
 
+        def as_native(self):
+            return self.__json_repr()
+
         def __element_json_repr(self, element):
             if hasattr(element, "__baked_by_bread__"):
                 return element.__json_repr()

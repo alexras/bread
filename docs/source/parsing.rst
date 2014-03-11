@@ -32,3 +32,7 @@ Parsed Object Methods
 Objects produced by bread can produce JSON representations of
 themselves. Calling the object's ``as_json()`` method will produce its data as
 a JSON string.
+
+Objects produced by bread can also produce representations of themselves as
+Pythonic ``list``s, ``dict``s, etc.  Calling the object's ``as_native()``
+method will produce its data in this form.
