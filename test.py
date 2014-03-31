@@ -395,6 +395,23 @@ def test_str():
 
     assert b.write(result, str_test) == data
 
+def test_str_unicode():
+    str_test = [("msg", b.string(5))]
+
+    data = bytearray([104, 101, 108, 108, 111])
+    result = b.parse(data, str_test)
+
+    assert result.msg == "hello"
+    assert b.write(result, str_test) == data
+
+    result.msg = "abate"
+
+    output_data = b.write(result, str_test)
+
+    edited_result = b.parse(output_data, str_test)
+
+    assert result.msg == "abate"
+
 def test_enum():
     enum_test = [
         ("suit", b.enum(8, {

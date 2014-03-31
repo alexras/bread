@@ -88,7 +88,12 @@ class BitwiseWriter(object):
         self.fp = stream
 
     def write(self, data, length_in_bits):
-        assert len(data) == (length_in_bits + 7) / 8
+        py_len = len(data)
+        bread_len_bytes = (length_in_bits + 7) / 8
+
+        assert py_len == bread_len_bytes, (
+            "Length of data in Python (%d) doesn't "
+            "match its length in bytes (%d)" % (py_len, bread_len_bytes))
 
         if len(data) == 0:
             return
@@ -445,7 +450,7 @@ def string(length, **kwargs):
             "%ds" % (length), reader.read(string_length).tobytes())[0]
 
     def string_writer(writer, value, **kwargs):
-        writer.write(bytearray(value), string_length)
+        writer.write(bytearray(value.encode("utf-8")), string_length)
 
     return field_descriptor(string_parser, string_writer, length * 8)
 
