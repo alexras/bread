@@ -2,3 +2,8 @@
 cover/
 .coverage
 docs/build
+MANIFEST
+*.egg-info/
+*.pyo
+build/
+dist/
