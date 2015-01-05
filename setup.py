@@ -18,4 +18,5 @@ setup(name='bread',
           "Topic :: Software Development :: Libraries :: Python Modules"],
       license='MIT',
       packages=['bread'],
-      requires=['bitstring'])
+      requires=['bitstring'],
+      install_requires=['bitstring'])
