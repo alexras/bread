@@ -78,4 +78,4 @@ A recent stable version of `bread` can be installed by running
 
 ## Documentation
 
-For the latest documentation, go to [https://bread.readthedocs.org/en/latest/]()
+For the latest documentation, go to [https://bread.readthedocs.org/en/latest/](https://bread.readthedocs.org/en/latest/)
