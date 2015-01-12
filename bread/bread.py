@@ -261,7 +261,6 @@ def parse_from_reader(reader, spec, type_name='bread_struct', **kwargs):
     class NewStruct(object):
         def __eq__(self, other):
             for key in self.__dict__.keys():
-                print key
                 if key not in other.__dict__:
                     return False
                 elif self.__dict__[key] != other.__dict__[key]:
