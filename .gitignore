@@ -7,3 +7,4 @@ MANIFEST
 *.pyo
 build/
 dist/
+.tox
