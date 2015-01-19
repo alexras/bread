@@ -18,6 +18,6 @@ setup(name='bread',
           "Programming Language :: Python :: 3",
           "Topic :: Software Development :: Libraries :: Python Modules"],
       license='MIT',
-      packages=['bread'],
+      packages=['bread', 'bread.vendor'],
       requires=['bitstring'],
       install_requires=['bitstring'])
