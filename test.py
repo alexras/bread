@@ -7,8 +7,8 @@ from nose.tools import assert_equal
 import bread as b
 
 def test_mask():
-    for offset in xrange(8):
-        for length in xrange(8 - offset):
+    for offset in range(8):
+        for length in range(8 - offset):
             expected = (2 ** length - 1) << max(8 - offset - length, 0)
 
             assert_equal(b.mask(0b11111111, offset, length), expected)
@@ -64,7 +64,7 @@ def test_write_single_byte():
 
     writer.close()
 
-    print "FINAL", map(bin, s.l)
+    print("FINAL", list(map(bin, s.l)))
     assert_equal(s.l, [0b10110101])
 
 def test_compress_format_string():
@@ -245,8 +245,8 @@ def test_nested_array():
 
     assert nested_test.first == 42
 
-    for i in xrange(9):
-        assert nested_test.matrix[i / 3][i % 3] == i
+    for i in range(9):
+        assert nested_test.matrix[int(i / 3)][int(i % 3)] == i
 
     assert nested_test.last == 0xdb
 
@@ -261,7 +261,7 @@ def test_nested_array():
     assert json.loads(nested_test.as_json()) == expected_json_struct
 
 def test_nested_struct():
-    data = bytearray(range(36))
+    data = bytearray(list(range(36)))
 
     supernested_test = b.parse(data, deeply_nested_struct)
 
@@ -277,7 +277,7 @@ def test_nested_struct():
         assert substruct.first == current_byte
         current_byte += 1
 
-        for i, j in itertools.product(xrange(3), xrange(3)):
+        for i, j in itertools.product(range(3), range(3)):
             assert substruct.matrix[i][j] == current_byte + i * 3 + j
 
         current_byte += 9
@@ -290,7 +290,7 @@ def test_nested_struct():
     assert supernested_test.dummy.ok == False
 
     assert (b.write(supernested_test, deeply_nested_struct) ==
-            bytearray(range(34) + [0b0]))
+            bytearray(list(range(34)) + [0b0]))
 
     expected_json_struct = {
         "dummy" : {
@@ -390,8 +390,7 @@ def test_str():
 
     data = bytearray([0x68, 0x65, 0x6c, 0x6c, 0x6f])
     result = b.parse(data, str_test)
-
-    assert result.msg == "hello"
+    assert result.msg.decode('utf-8') == "hello"
 
     assert b.write(result, str_test) == data
 
@@ -401,7 +400,7 @@ def test_str_unicode():
     data = bytearray([104, 101, 108, 108, 111])
     result = b.parse(data, str_test)
 
-    assert result.msg == "hello"
+    assert result.msg.decode('utf-8') == "hello"
     assert b.write(result, str_test) == data
 
     result.msg = "abate"
@@ -421,7 +420,7 @@ def test_enum():
             3: "clubs"
         }))]
 
-    for value, suit in zip(range(4), ["diamonds", "hearts", "spades", "clubs"]):
+    for value, suit in zip(list(range(4)), ["diamonds", "hearts", "spades", "clubs"]):
         data = bytearray([value])
         result = b.parse(data, enum_test)
 
@@ -432,7 +431,7 @@ def test_enum():
         data = bytearray([42])
         result = b.parse(data, enum_test)
         assert False, "Failed to throw an error"
-    except ValueError, e:
+    except ValueError as e:
         # expected
         pass
 
@@ -527,7 +526,7 @@ def test_non_powers_of_eight_intX():
     assert_equal(b.write(result, intX_test), in_bytes)
 
 def test_read_modify_write():
-    data = bytearray(range(36))
+    data = bytearray(list(range(36)))
 
     supernested_test = b.parse(data, deeply_nested_struct)
 
@@ -557,7 +556,7 @@ def test_read_modify_write_with_offset():
     assert output[0] == 9
 
 def test_file_io():
-    data = bytearray(range(36))
+    data = bytearray(list(range(36)))
 
     supernested_test = b.parse(data, deeply_nested_struct)
 
@@ -569,7 +568,7 @@ def test_file_io():
         with open(file_path, 'rb') as fp:
             supernested_test_from_file = b.parse(fp, deeply_nested_struct)
 
-        for i,j,k in itertools.product(xrange(3), xrange(3), xrange(3)):
+        for i,j,k in itertools.product(range(3), range(3), range(3)):
             assert (supernested_test_from_file.ubermatrix[i].matrix[j][k] ==
                     supernested_test.ubermatrix[i].matrix[j][k])
     finally:
