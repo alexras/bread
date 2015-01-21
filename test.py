@@ -2,83 +2,9 @@
 
 import struct, sys, pprint, unittest, itertools, tempfile, os, json
 
-from nose.tools import assert_equal
+from nose.tools import assert_equal, assert_not_equal, assert_true, assert_false
 
 import bread as b
-
-def test_mask():
-    for offset in range(8):
-        for length in range(8 - offset):
-            expected = (2 ** length - 1) << max(8 - offset - length, 0)
-
-            assert_equal(b.mask(0b11111111, offset, length), expected)
-
-def test_rightshift():
-    assert_equal(b.rightshift([0b11111111], 8, 3), [0b00011111, 0b11100000])
-    assert_equal(b.rightshift([0b11111111], 8, 8), [0, 0b11111111])
-    assert_equal(b.rightshift([0b11111111], 8, 0), [0b11111111])
-    assert_equal(b.rightshift([0b11111111], 8, 11), [0, 0b00011111, 0b11100000])
-    assert_equal(b.rightshift([0b10000000], 1, 1), [0b01000000])
-    assert_equal(b.rightshift([0b10000000], 1, 7), [0b00000001])
-
-    assert_equal(b.rightshift([0b10101010, 0b01101101, 0b11011010], 24, 3),
-                 [0b00010101, 0b01001101, 0b10111011, 0b01000000])
-
-class ByteListStream(object):
-    def __init__(self):
-        self.l = []
-
-    def write(self, x):
-        if type(x) in [list, bytearray]:
-            self.l.extend(x)
-        else:
-            self.l.append(x)
-
-    def close(self):
-        pass
-
-def test_write_ones():
-    s = ByteListStream()
-    writer = b.BitwiseWriter(s)
-
-    writer.write([0b11111000], 5)
-    writer.write([0b11111100], 6)
-    writer.write([0b11111111], 8)
-
-    writer.close()
-
-    assert_equal(s.l, [0b11111111, 0b11111111, 0b11100000])
-
-def test_write_single_byte():
-    s = ByteListStream()
-    writer = b.BitwiseWriter(s)
-
-    writer.write([0b10000000], 1)
-    writer.write([0], 1)
-    writer.write([0b10000000], 1)
-    writer.write([0b10000000], 1)
-    writer.write([0], 1)
-    writer.write([0b10000000], 1)
-    writer.write([0], 1)
-    writer.write([0b10000000], 1)
-
-    writer.close()
-
-    print("FINAL", list(map(bin, s.l)))
-    assert_equal(s.l, [0b10110101])
-
-def test_compress_format_string():
-    assert b.compress_format_string(['<B', '<B', '<B', '>h']) == ['<3B', '>h']
-    assert b.compress_format_string(['>h', '<B', '<B', '<B']) == ['>h', '<3B']
-    assert (b.compress_format_string(['<B', '>h', '<B', '<B']) ==
-            ['<B', '>h', '<2B'])
-
-    assert (b.compress_format_string(['<3B', '<2B', '<5B', '>h']) ==
-            ['<10B', '>h'])
-
-    uncompressible = ['intle:21', 'intle:21', 'intle:21', '<B', 'intle:21']
-
-    assert b.compress_format_string(uncompressible) == uncompressible
 
 # Shared structs for bread struct test
 
@@ -123,32 +49,32 @@ def test_simple_struct():
     data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
     test = b.parse(data, spec = test_struct)
 
-    assert test.__offsets__.flag_one == 0
-    assert test.__offsets__.flag_two == 1
-    assert test.__offsets__.flag_three == 2
-    assert test.__offsets__.flag_four == 3
-    assert test.__offsets__.first == 4
-    assert test.__offsets__.blah == 16
-    assert test.__offsets__.second == 32
-    assert test.__offsets__.third == 96
-    assert test.__offsets__.fourth == 160
+    assert_equal(test.__offsets__.flag_one, 0)
+    assert_equal(test.__offsets__.flag_two, 1)
+    assert_equal(test.__offsets__.flag_three, 2)
+    assert_equal(test.__offsets__.flag_four, 3)
+    assert_equal(test.__offsets__.first, 4)
+    assert_equal(test.__offsets__.blah, 16)
+    assert_equal(test.__offsets__.second, 32)
+    assert_equal(test.__offsets__.third, 96)
+    assert_equal(test.__offsets__.fourth, 160)
 
-    assert len(test) == 168
+    assert_equal(len(test), 168)
 
-    assert test.flag_one == True
-    assert test.flag_two == False
-    assert test.flag_three == True
-    assert test.flag_four == False
-    assert test.first == 0xfb
-    assert test.blah == 0xdddd
+    assert_equal(test.flag_one, True)
+    assert_equal(test.flag_two, False)
+    assert_equal(test.flag_three, True)
+    assert_equal(test.flag_four, False)
+    assert_equal(test.first, 0xfb)
+    assert_equal(test.blah, 0xdddd)
 
-    assert test.second == -57
-    assert test.third == 90
-    assert test.fourth == 0
+    assert_equal(test.second, -57)
+    assert_equal(test.third, 90)
+    assert_equal(test.fourth, 0)
 
     output_data = b.write(test, test_struct)
 
-    assert output_data == data
+    assert_equal(output_data, data)
 
     expected_json_struct = {
         "flag_one" : True,
@@ -162,7 +88,7 @@ def test_simple_struct():
         "fourth" : 0
     }
 
-    assert json.loads(test.as_json()) == expected_json_struct
+    assert_equal(json.loads(test.as_json()), expected_json_struct)
 
 def test_updates_do_not_leak():
     data = struct.pack(">IqQb", 0xafb3dddd, -57, 90, 0)
@@ -174,41 +100,41 @@ def test_updates_do_not_leak():
 
     # test2's offsets should be the same as test's
 
-    assert test2.__offsets__.flag_one == 0
-    assert test2.__offsets__.flag_two == 1
-    assert test2.__offsets__.flag_three == 2
-    assert test2.__offsets__.flag_four == 3
-    assert test2.__offsets__.first == 4
-    assert test2.__offsets__.blah == 16
-    assert test2.__offsets__.second == 32
-    assert test2.__offsets__.third == 96
-    assert test2.__offsets__.fourth == 160
+    assert_equal(test2.__offsets__.flag_one, 0)
+    assert_equal(test2.__offsets__.flag_two, 1)
+    assert_equal(test2.__offsets__.flag_three, 2)
+    assert_equal(test2.__offsets__.flag_four, 3)
+    assert_equal(test2.__offsets__.first, 4)
+    assert_equal(test2.__offsets__.blah, 16)
+    assert_equal(test2.__offsets__.second, 32)
+    assert_equal(test2.__offsets__.third, 96)
+    assert_equal(test2.__offsets__.fourth, 160)
 
-    assert len(test2) == 168
+    assert_equal(len(test2), 168)
 
-    assert test2.flag_one == False
-    assert test2.flag_two == False
-    assert test2.flag_three == False
-    assert test2.flag_four == True
-    assert test2.first == 0xde
-    assert test2.blah == 0xfafe
+    assert_equal(test2.flag_one, False)
+    assert_equal(test2.flag_two, False)
+    assert_equal(test2.flag_three, False)
+    assert_equal(test2.flag_four, True)
+    assert_equal(test2.first, 0xde)
+    assert_equal(test2.blah, 0xfafe)
 
-    assert test2.second == 24
-    assert test2.third == 999999
-    assert test2.fourth == 1
+    assert_equal(test2.second, 24)
+    assert_equal(test2.third, 999999)
+    assert_equal(test2.fourth, 1)
 
     # Updating test2 shouldn't impact test
 
-    assert test.flag_one == True
-    assert test.flag_two == False
-    assert test.flag_three == True
-    assert test.flag_four == False
-    assert test.first == 0xfb
-    assert test.blah == 0xdddd
+    assert_equal(test.flag_one, True)
+    assert_equal(test.flag_two, False)
+    assert_equal(test.flag_three, True)
+    assert_equal(test.flag_four, False)
+    assert_equal(test.first, 0xfb)
+    assert_equal(test.blah, 0xdddd)
 
-    assert test.second == -57
-    assert test.third == 90
-    assert test.fourth == 0
+    assert_equal(test.second, -57)
+    assert_equal(test.third, 90)
+    assert_equal(test.fourth, 0)
 
 
 def test_array():
@@ -222,35 +148,36 @@ def test_array():
 
     array_test = b.parse(data, test_array_struct)
 
-    assert array_test.__offsets__.first == 0
-    assert array_test.__offsets__.flags == 8
-    assert array_test.__offsets__.last == 16
+    assert_equal(array_test.__offsets__.first, 0)
+    assert_equal(array_test.__offsets__.flags, 8)
+    assert_equal(array_test.__offsets__.last, 16)
 
-    assert len(array_test) == 24
+    assert_equal(len(array_test), 24)
 
-    assert (array_test.flags ==
-            [True, False, False, True, False, True, False, True])
+    expected_flags = [True, False, False, True, False, True, False, True]
 
-    assert b.write(array_test, test_array_struct) == data
+    assert_equal(array_test.flags, expected_flags)
+
+    assert_equal(b.write(array_test, test_array_struct), data)
 
 def test_nested_array():
     data = bytearray([42, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0xdb])
 
     nested_test = b.parse(data, nested_array_struct)
 
-    assert nested_test.__offsets__.first == 0
-    assert nested_test.__offsets__.matrix == 8
-    assert nested_test.__offsets__.last == 80
-    assert len(nested_test) == 88
+    assert_equal(nested_test.__offsets__.first, 0)
+    assert_equal(nested_test.__offsets__.matrix, 8)
+    assert_equal(nested_test.__offsets__.last, 80)
+    assert_equal(len(nested_test), 88)
 
-    assert nested_test.first == 42
+    assert_equal(nested_test.first, 42)
 
     for i in range(9):
-        assert nested_test.matrix[int(i / 3)][int(i % 3)] == i
+        assert_equal(nested_test.matrix[int(i / 3)][int(i % 3)], i)
 
-    assert nested_test.last == 0xdb
+    assert_equal(nested_test.last, 0xdb)
 
-    assert b.write(nested_test, nested_array_struct) == data
+    assert_equal(b.write(nested_test, nested_array_struct), data)
 
     expected_json_struct = {
         "first" : 42,
@@ -258,39 +185,39 @@ def test_nested_array():
         "last" : 0xdb
     }
 
-    assert json.loads(nested_test.as_json()) == expected_json_struct
+    assert_equal(json.loads(nested_test.as_json()), expected_json_struct)
 
 def test_nested_struct():
     data = bytearray(list(range(36)))
 
     supernested_test = b.parse(data, deeply_nested_struct)
 
-    assert supernested_test.__offsets__.ubermatrix == 0
-    assert supernested_test.__offsets__.dummy == 264
-    assert len(supernested_test) == 273
+    assert_equal(supernested_test.__offsets__.ubermatrix, 0)
+    assert_equal(supernested_test.__offsets__.dummy, 264)
+    assert_equal(len(supernested_test), 273)
 
-    assert len(supernested_test.ubermatrix) == 3
+    assert_equal(len(supernested_test.ubermatrix), 3)
 
     current_byte = 0
 
     for substruct in supernested_test.ubermatrix:
-        assert substruct.first == current_byte
+        assert_equal(substruct.first, current_byte)
         current_byte += 1
 
         for i, j in itertools.product(range(3), range(3)):
-            assert substruct.matrix[i][j] == current_byte + i * 3 + j
+            assert_equal(substruct.matrix[i][j], current_byte + i * 3 + j)
 
         current_byte += 9
 
-        assert substruct.last == current_byte
+        assert_equal(substruct.last, current_byte)
         current_byte += 1
 
-    assert supernested_test.dummy.length == current_byte
+    assert_equal(supernested_test.dummy.length, current_byte)
     current_byte += 1
-    assert supernested_test.dummy.ok == False
+    assert_equal(supernested_test.dummy.ok, False)
 
-    assert (b.write(supernested_test, deeply_nested_struct) ==
-            bytearray(list(range(34)) + [0b0]))
+    assert_equal(b.write(supernested_test, deeply_nested_struct),
+                 bytearray(list(range(34)) + [0b0]))
 
     expected_json_struct = {
         "dummy" : {
@@ -316,7 +243,7 @@ def test_nested_struct():
         ]
     }
 
-    assert json.loads(supernested_test.as_json()) == expected_json_struct
+    assert_equal(json.loads(supernested_test.as_json()), expected_json_struct)
 
 
 def test_single_byte_fields():
@@ -330,12 +257,12 @@ def test_single_byte_fields():
 
     test = b.parse(data, single_byte_fields_struct)
 
-    assert test.bit_0 == 1
-    assert test.bit_1 == 0
-    assert test.semi_nibble == 0b11
-    assert test.nibble == 0b0010
+    assert_equal(test.bit_0, 1)
+    assert_equal(test.bit_1, 0)
+    assert_equal(test.semi_nibble, 0b11)
+    assert_equal(test.nibble, 0b0010)
 
-    assert b.write(test, single_byte_fields_struct) == data
+    assert_equal(b.write(test, single_byte_fields_struct), data)
 
 def test_endianness():
     endianness_test = [
@@ -347,11 +274,11 @@ def test_endianness():
 
     test = b.parse(data, endianness_test)
 
-    assert test.big_endian == 0x01020304
-    assert test.little_endian == 0x04030201
-    assert test.default_endian == test.little_endian
+    assert_equal(test.big_endian, 0x01020304)
+    assert_equal(test.little_endian, 0x04030201)
+    assert_equal(hex(test.default_endian), hex(test.little_endian))
 
-    assert b.write(test, endianness_test) == data
+    assert_equal(b.write(test, endianness_test), data)
 
 def test_conditional():
     conditional_test = [
@@ -366,33 +293,33 @@ def test_conditional():
 
     true_test = b.parse(true_data, conditional_test)
 
-    assert true_test.qux == True
-    assert hasattr(true_test, "frooz")
-    assert not hasattr(true_test, "fooz")
-    assert true_test.frooz == 0b1001
-    assert true_test.quxz == 0b01011101
+    assert_equal(true_test.qux, True)
+    assert_true(hasattr(true_test, "frooz"))
+    assert_false(hasattr(true_test, "fooz"))
+    assert_equal(true_test.frooz, 0b1001)
+    assert_equal(true_test.quxz, 0b01011101)
 
     assert_equal(b.write(true_test, conditional_test), true_data)
 
     false_data = bytearray([0b01001000, 0b10000000, 0b10000000])
 
     false_test = b.parse(false_data, conditional_test)
-    assert false_test.qux == False
-    assert hasattr(false_test, "fooz")
-    assert not hasattr(false_test, "frooz")
-    assert false_test.fooz == 0b10010001
-    assert false_test.barz == 1
+    assert_equal(false_test.qux, False)
+    assert_true(hasattr(false_test, "fooz"))
+    assert_false(hasattr(false_test, "frooz"))
+    assert_equal(false_test.fooz, 0b10010001)
+    assert_equal(false_test.barz, 1)
 
-    assert b.write(false_test, conditional_test) == false_data
+    assert_equal(b.write(false_test, conditional_test), false_data)
 
 def test_str():
     str_test = [("msg", b.string(5))]
 
     data = bytearray([0x68, 0x65, 0x6c, 0x6c, 0x6f])
     result = b.parse(data, str_test)
-    assert result.msg.decode('utf-8') == "hello"
+    assert_equal(result.msg.decode('utf-8'), "hello")
 
-    assert b.write(result, str_test) == data
+    assert_equal(b.write(result, str_test), data)
 
 def test_str_unicode():
     str_test = [("msg", b.string(5))]
@@ -400,8 +327,8 @@ def test_str_unicode():
     data = bytearray([104, 101, 108, 108, 111])
     result = b.parse(data, str_test)
 
-    assert result.msg.decode('utf-8') == "hello"
-    assert b.write(result, str_test) == data
+    assert_equal(result.msg.decode('utf-8'), "hello")
+    assert_equal(b.write(result, str_test), data)
 
     result.msg = "abate"
 
@@ -409,7 +336,7 @@ def test_str_unicode():
 
     edited_result = b.parse(output_data, str_test)
 
-    assert result.msg == "abate"
+    assert_equal(result.msg, "abate")
 
 def test_enum():
     enum_test = [
@@ -420,12 +347,13 @@ def test_enum():
             3: "clubs"
         }))]
 
-    for value, suit in zip(list(range(4)), ["diamonds", "hearts", "spades", "clubs"]):
+    for value, suit in zip(
+            list(range(4)), ["diamonds", "hearts", "spades", "clubs"]):
         data = bytearray([value])
         result = b.parse(data, enum_test)
 
-        assert result.suit == suit
-        assert b.write(result, enum_test) == data
+        assert_equal(result.suit, suit)
+        assert_equal(b.write(result, enum_test), data)
 
     try:
         data = bytearray([42])
@@ -447,12 +375,12 @@ def test_enum_default():
     data = bytearray([42])
     result = b.parse(data, enum_test)
 
-    assert result.suit == "joker"
+    assert_equal(result.suit, "joker")
 
     data = bytearray([2])
     result = b.parse(data, enum_test)
 
-    assert result.suit == "spades"
+    assert_equal(result.suit, "spades")
 
 def test_conditional_on_non_integer_enum():
     enum_test = [
@@ -473,37 +401,37 @@ def test_conditional_on_non_integer_enum():
 
     pulse = b.parse(pulse_test, enum_test)
 
-    assert pulse.instrument_type == "pulse"
-    assert pulse.pulse_foo == 19
+    assert_equal(pulse.instrument_type, "pulse")
+    assert_equal(pulse.pulse_foo, 19)
 
-    assert b.write(pulse, enum_test) == pulse_test
+    assert_equal(b.write(pulse, enum_test), pulse_test)
 
     wave_test = bytearray([1, 65])
 
     wave = b.parse(wave_test, enum_test)
 
-    assert wave.instrument_type == "wave"
-    assert wave.wave_foo == 65
+    assert_equal(wave.instrument_type, "wave")
+    assert_equal(wave.wave_foo, 65)
 
-    assert b.write(wave, enum_test) == wave_test
+    assert_equal(b.write(wave, enum_test), wave_test)
 
     kit_test = bytearray([2, 9])
 
     kit = b.parse(kit_test, enum_test)
 
-    assert kit.instrument_type == "kit"
-    assert kit.kit_foo == 9
+    assert_equal(kit.instrument_type, "kit")
+    assert_equal(kit.kit_foo, 9)
 
-    assert b.write(kit, enum_test) == kit_test
+    assert_equal(b.write(kit, enum_test), kit_test)
 
     noise_test = bytearray([3, 17])
 
     noise = b.parse(noise_test, enum_test)
 
-    assert noise.instrument_type == "noise"
-    assert noise.noise_foo == 17
+    assert_equal(noise.instrument_type, "noise")
+    assert_equal(noise.noise_foo, 17)
 
-    assert b.write(noise, enum_test) == noise_test
+    assert_equal(b.write(noise, enum_test), noise_test)
 
 def test_non_powers_of_eight_intX():
     intX_test = [
@@ -518,10 +446,10 @@ def test_non_powers_of_eight_intX():
 
     result = b.parse(in_bytes, intX_test)
 
-    assert result.unsigned_10b == 0b1101010111
-    assert result.unsigned_14b == 0b10101000110101
-    assert result.signed_20b == - 0b101010000101011101
-    assert result.signed_4b == 0b0101
+    assert_equal(result.unsigned_10b, 0b1101010111)
+    assert_equal(result.unsigned_14b, 0b10101000110101)
+    assert_equal(result.signed_20b, - 0b101010000101011101)
+    assert_equal(result.signed_4b, 0b0101)
 
     assert_equal(b.write(result, intX_test), in_bytes)
 
@@ -530,7 +458,7 @@ def test_read_modify_write():
 
     supernested_test = b.parse(data, deeply_nested_struct)
 
-    assert supernested_test.ubermatrix[1].matrix[2][1] == 19
+    assert_equal(supernested_test.ubermatrix[1].matrix[2][1], 19)
 
     supernested_test.ubermatrix[1].matrix[2][1] = 42
 
@@ -538,22 +466,22 @@ def test_read_modify_write():
 
     re_read_data = b.parse(written_data, deeply_nested_struct)
 
-    assert re_read_data.ubermatrix[1].matrix[2][1] == 42
+    assert_equal(re_read_data.ubermatrix[1].matrix[2][1], 42)
 
 def test_read_modify_write_with_offset():
     data = bytearray([4])
 
     parsed = b.parse(data, offset_struct)
-    assert parsed.length == 5
+    assert_equal(parsed.length, 5)
 
     output = b.write(parsed, offset_struct)
-    assert output == data
+    assert_equal(output, data)
 
     parsed.length = 10
 
     output = b.write(parsed, offset_struct)
 
-    assert output[0] == 9
+    assert_equal(output[0], 9)
 
 def test_file_io():
     data = bytearray(list(range(36)))
@@ -569,8 +497,8 @@ def test_file_io():
             supernested_test_from_file = b.parse(fp, deeply_nested_struct)
 
         for i,j,k in itertools.product(range(3), range(3), range(3)):
-            assert (supernested_test_from_file.ubermatrix[i].matrix[j][k] ==
-                    supernested_test.ubermatrix[i].matrix[j][k])
+            assert_equal(supernested_test_from_file.ubermatrix[i].matrix[j][k],
+                         supernested_test.ubermatrix[i].matrix[j][k])
     finally:
         os.close(handle)
         os.unlink(file_path)
@@ -580,12 +508,12 @@ def test_comparison():
     obj_1 = b.parse(data, spec = test_struct)
     obj_2 = b.parse(data, spec = test_struct)
 
-    assert obj_1 == obj_2
+    assert_equal(obj_1, obj_2)
 
     obj_2.flag_four = not obj_1.flag_four
 
-    assert obj_1 != obj_2
+    assert_not_equal(obj_1, obj_2)
 
     obj_2.flag_four = obj_1.flag_four
 
-    assert obj_1 == obj_2
+    assert_equal(obj_1, obj_2)
