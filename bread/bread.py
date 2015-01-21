@@ -1,5 +1,5 @@
-import types, struct, collections, functools, json
-from bitstring import ConstBitStream, pack
+import types, collections, functools, json
+from bitstring import BitArray, pack
 
 from .vendor.six.moves import range
 
@@ -7,153 +7,341 @@ LITTLE_ENDIAN = 0
 BIG_ENDIAN = 1
 CONDITIONAL = 2
 
-COMPACT_FORMAT_STRINGS = {
-    8: 'b',
-    16: 'h',
-    32: 'l',
-    64: 'q'
-}
-
-KEEP_LEFT = [
-    0b00000000,
-    0b10000000,
-    0b11000000,
-    0b11100000,
-    0b11110000,
-    0b11111000,
-    0b11111100,
-    0b11111110,
-    0b11111111]
-
-KEEP_RIGHT = [
-    0b00000000,
-    0b00000001,
-    0b00000011,
-    0b00000111,
-    0b00001111,
-    0b00011111,
-    0b00111111,
-    0b01111111,
-    0b11111111]
-
-def mask(x, offset, length):
-    """
-    Masks off a portion of the byte starting at `offset` and extending for
-    `length` bits.
-    """
-    return (x & KEEP_RIGHT[8 - offset]) & KEEP_LEFT[min(offset + length, 8)]
-
-def rightshift(bytelist, length, offset):
-    """
-    Shift every byte in `bytelist` to the right by `offset` and return the
-    new bytelist as a bytearray.
-    """
-    prev_byte = None
-
-    # Only return the bytes that actually contain data (to avoid returning
-    # extra 0 bytes unnecessarily)
-    bytes_to_keep = 0
-
-    shifted_bytes = []
-
-    # Handle the easier base-cases (more than a whole byte of shift, or no
-    # shift at all)
-    while offset >= 8:
-        shifted_bytes.append(0)
-        offset -= 8
-        bytes_to_keep += 1
-
-    # Round up to the nearest byte
-    bytes_to_keep += (offset + length + 7) / 8
-
-    if offset == 0:
-        shifted_bytes.extend(bytelist)
-        return shifted_bytes
-
-    next_byte = 0
-
-    for b in bytelist:
-        first_bits = mask(b, 0, 8 - offset)
-        last_bits = mask(b, 8 - offset, offset)
-
-        shifted_bytes.append( (first_bits >> offset) | next_byte)
-        next_byte = last_bits << (8 - offset)
-
-    shifted_bytes.append(next_byte)
-
-    return shifted_bytes[:int(bytes_to_keep)]
-
-class BitwiseWriter(object):
-    def __init__(self, stream):
-        self.bits_written = 0
-        self.last_byte = 0b00000000
-        self.fp = stream
-
-    def write(self, data, length_in_bits):
-        py_len = len(data)
-        bread_len_bytes = int((length_in_bits + 7) / 8)
-
-        assert py_len == bread_len_bytes, (
-            "Length of data in Python (%d) doesn't "
-            "match its length in bytes (%d)" % (py_len, bread_len_bytes))
-
-        if len(data) == 0:
-            return
-
-        # If we've got some bits left over from the last write, we'll need to
-        # shift the data over and push those last bits into the front of the
-        # write stream
-        right_shift_amt = self.bits_written % 8
-
-        if right_shift_amt > 0:
-            shifted_data = rightshift(data, length_in_bits, right_shift_amt)
-            shifted_data[0] = shifted_data[0] | self.last_byte
-        else:
-            shifted_data = data
-
-        leftover_bits = (self.bits_written + length_in_bits) % 8
-
-        # If data doesn't end on a clean byte boundary,
-        if leftover_bits != 0:
-            self.last_byte = shifted_data.pop()
-
-        if len(shifted_data) > 0:
-            self.fp.write(shifted_data)
-
-        self.bits_written += length_in_bits
-
-    def close(self):
-        if self.bits_written % 8 != 0:
-            self.fp.write(bytearray([self.last_byte]))
-
-        self.fp.close()
-
-class ByteArrayStream(object):
-    def __init__(self):
-        self.array = bytearray()
-
-    def write(self, x):
-        if type(x) in [list, bytearray]:
-            self.array.extend(x)
-        else:
-            self.array.append(x)
-
-    def close(self):
-        pass
-
 # Enumeration of different operations that field descriptors can perform
 READ = 0
 WRITE = 1
 
+class BreadField(object):
+    def __init__(self, length, encode_fn, decode_fn):
+        self._data_bits = None
+        self._offset = None
+        self._length = length
+        self._cached_value = None
+
+        self._encode_fn = encode_fn
+        self._decode_fn = decode_fn
+
+    @property
+    def length(self):
+        return self._length
+
+    def _set_data(self, data_bits):
+        self._data_bits = data_bits
+
+    def get(self):
+        if self._cached_value is not None:
+            start_bit = self._offset
+            end_bit = self._offset + self.length
+
+            value_bits = self._data_bits[start_bit:end_bit]
+            self._cached_value = self._decode_fn(value_bits)
+
+        return self._cached_value
+
+    def set(self, value):
+        value_bits = self._encode_fn(value)
+
+        self._data_bits.overwrite(value_bits.bin, self._offset)
+
+        self._cached_value = value
+
+    def copy(self):
+        return BreadField(self._length, self._encode_fn, self._decode_fn)
+
+
+class BreadArray(object):
+    def __init__(self, length, item_template):
+        self._items = []
+
+        if item_template is not None:
+            for i in range(length):
+                self._items.append(item_template._copy())
+
+    def __getitem__(self, index):
+        return self._items[index].get()
+
+    def __setitem__(self, index, value):
+        self._items[index].set(value)
+
+    def get(self):
+        raise KeyError('Cannot retrieve an array directly')
+
+    def set(self, value):
+        raise KeyError('Cannot modify an array directly')
+
+    def copy(self):
+        copy = BreadArray(length, None)
+
+        for item in self._items:
+            copy._items.append(item.copy())
+
+    def _set_data(self, data_bits):
+        for item in self._items:
+            item._set_data(data_bits)
+
+    @property
+    def _offset(self):
+        return self._items[0]._offset
+
+    @_offset.setter
+    def _offset(self, value):
+        offset = value
+
+        for item in self._items:
+            item._offset = value
+            offset += item.length
+
+
+BREAD_STRUCT_RESERVED_FIELDS = (
+    '_fields', '_data_bits', '_add_field', '__offsets__', '_LENGTH', 'offset')
+
+class BreadStruct(object):
+    def __init__(self):
+        self._data_bits = None
+        self._fields = {}
+        self._field_list = []
+
+        # __offsets__ retained for backwards compatibility
+        self.__offsets__ = object()
+
+    def _set_data(self, data_bits):
+        self._data_bits = data_bits
+
+        for field in self._field_list:
+            field._set_data(data_bits)
+
+    @property
+    def _offset(self):
+        # A struct's offset is the offset where its first field starts
+        return self._field_list[0]._offset
+
+    @_offset.setter
+    def _offset(self, value):
+        offset = value
+
+        # All fields offsets are relative to the starting offset for the struct
+        for field in self._field_list:
+            field._offset = offset
+            offset += field.length
+
+        for name, field in self._fields.items():
+            setattr(self.__offsets__, name, field._offset)
+
+    # _LENGTH retained for backwards compatibility
+    @property
+    def _LENGTH():
+        return sum(lambda x: x.length, self._field_list)
+
+    def __getattr__(self, attr):
+        if attr in BREAD_STRUCT_RESERVED_FIELDS:
+            return getattr(super(BreadStruct, self), attr)
+
+        if attr not in self._fields:
+            raise AttributeError("No known field '%s'" % (attr))
+
+        field = self._fields[attr]
+
+        return field.get()
+
+
+    def __setattr__(self, attr, value):
+        if attr in BREAD_STRUCT_RESERVED_FIELDS:
+            return setattr(super(BreadStruct, self), attr, value)
+
+        if attr not in self._fields:
+            raise AttributeError("No known field '%s'" % (attr))
+
+        field = self._fields[attr]
+        field.set(value)
+
+    def _add_field(self, name, field):
+        self._fields[name] = field
+        self._field_list.append(field)
+
+    def _copy(self):
+        copy = BreadStruct(self._data_bits)
+
+        for field in self._fields:
+            copy._add_field(field.copy())
+
+        return copy
+
+    def as_json(self):
+        # FIXME FINISH
+        pass
+
+    def as_native(self):
+        # FIXME FINISH
+        pass
+
+
+# BEGIN TYPE INFORMATION
+
+def intX(length, signed=False):
+    options = {}
+
+    int_type_key = None
+
+    if signed:
+        int_type_key = 'int'
+    else:
+        int_type_key = 'uint'
+
+    if endianness == LITTLE_ENDIAN:
+        int_type_key += 'le'
+    else:
+        int_type_key += 'be'
+
+    options[int_type_key] = value
+    options['length'] = length
+
+    def encode_intX(value):
+        return BitArray(**options)
+
+    def decode_intX(encoded):
+        return getattr(encoded, int_type_key)
+
+    return BreadField(length, encode_intX, decode_intX)
+
+uint8  = intX(length=8,  signed=False)
+byte = uint8
+uint16 = intX(length=16, signed=False)
+uint32 = intX(length=32, signed=False)
+uint64 = intX(length=64, signed=False)
+int8   = intX(length=8,  signed=True)
+int16  = intX(length=16, signed=True)
+int32  = intX(length=32, signed=True)
+int64  = intX(length=64, signed=True)
+bit = intX(1, signed=False)
+semi_nibble = intX(2, signed=False)
+nibble = intX(4, signed=False)
+
+def string(length):
+    length_in_bits = length * 8
+
+    def encode_string(value):
+        if type(value) != bytes:
+            value = value.encode('utf-8')
+
+        return BitArray(bytes=value)
+
+    def decode_string(encoded):
+        return encoded.bin
+
+    return BreadField(length_in_bits, encode_string, decode_string)
+
+def encode_bool(value):
+    return BitArray(bool=value)
+
+def decode_bool(encoded):
+    return encoded.bool
+
+def boolean():
+    return BreadField(1, encode_bool, decode_bool)
+
+def padding(length):
+    def encode_pad(value):
+        return pack('pad:n', n=value)
+
+    def decode_pad(encoded):
+        return None
+
+    return BreadField(length, encode_pad, decode_pad)
+
+def enum(length, values, default=None):
+    enum_field = int_X(length, signed=False)
+
+    old_encode_fn = enum_field.encode_fn
+    old_decode_fn = enum_field.decode_fn
+
+    def encode_enum(value):
+        return old_encode_fn(values[value])
+
+    def decode_enum(encoded):
+        return values[old_decode_fn(encoded)]
+
+    enum_field._encode_fn = encode_enum
+    enum_field._decode_fn = decode_enum
+
+    return enum_field
+
+def array(length, substruct):
+    if type(substruct) == list:
+        substruct = build_struct(spec=substruct)
+
+    return BreadArray(length, substruct)
+
+# END TYPE INFORMATION
+
+def build_struct(spec, type_name):
+    # Give different structs the appearance of having different type names
+    class NewStruct(BreadStruct):
+        pass
+
+    NewStruct.__name__ = type_name
+
+    struct = NewStruct()
+
+    global_options = {}
+
+    spec = collections.deque(spec)
+
+    unnamed_fields = 1
+
+    # Read specification one line at a time, greedily consuming bits from the
+    # stream as you go
+    while len(spec) > 0:
+        spec_line = spec.popleft()
+
+        if type(spec_line) == dict:
+            # A dictionary in the spec indicates global options for parsing
+            global_options = spec_line
+        elif isinstance(spec_line, types.FunctionType) or len(spec_line) == 1:
+            # This part of the spec doesn't have a name; evaluate the function
+            # to get the field object and then give that object a fake name.
+            # Spec lines of length 1 are assumed to be functions.
+
+            if isinstance(spec_line, types.FunctionType):
+                field = spec_line
+            else:
+                field = spec_line[0]
+
+            field.set_options(**global_options)
+            struct._add_field('_unnamed_%d' % (unnamed_fields), field)
+            unnamed_fields += 1
+        elif spec_line[0] == CONDITIONAL:
+            # FIXME FINISH
+        else:
+            field_name = spec_line[0]
+            field = spec_line[1]
+            options = global_options
+
+            # Options for this field, if any, override the global options
+            if len(spec_line) == 3:
+                options = global_options.copy()
+                options.update(spec_line[2])
+
+            field.set_options(**options)
+
+            struct._add_field(field_name, field)
+
+    return struct
+
+
 def parse(data_source, spec, type_name='bread_struct'):
     if type(data_source) == str:
-        reader = ConstBitStream(bytes=data_source)
+        data_bits = BitArray(bytes=data_source)
     elif type(data_source) == list:
-        reader = ConstBitStream(bytes=data_source)
+        data_bits = BitArray(bytes=data_source)
     else:
-        reader = ConstBitStream(data_source)
+        data_bits = BitArray(data_source)
 
-    return parse_from_reader(reader, spec, type_name)
+    struct = build_struct(spec, type_name)
+
+    struct._set_data(data_bits)
+    struct._offset = 0
+
+    return struct
 
 def process_spec(spec, handle_function, handle_field, handle_conditional):
     global_options = {}
@@ -364,234 +552,3 @@ def write(parsed_obj, spec, filename=None):
 
     if filename is None:
         return fp.array
-
-def field_descriptor(read_fn, write_fn, length):
-    # For reads, 'target' is a reader and 'data' is None. For writes, 'target'
-    # is a writer and 'data' is the value to write.
-    def catchall_fn(_operation, _target, _data, **kwargs):
-        if _operation == READ:
-            return read_fn(_target, **kwargs)
-        elif _operation == WRITE:
-            if _data is None:
-                assert length is not None, (
-                    "Field is null, but I can't determine its length for "
-                    "padding")
-                return make_pad_writer(length)(_target, _data)
-            else:
-                return write_fn(_target, _data, **kwargs)
-
-    return catchall_fn
-
-def intX(length, signed = False):
-    simple_length = length in COMPACT_FORMAT_STRINGS
-
-    def _gen_format_string(endianness):
-        if simple_length:
-            if endianness == LITTLE_ENDIAN:
-                format_string = '<'
-            else:
-                format_string = '>'
-
-            format_character = COMPACT_FORMAT_STRINGS[length]
-
-            if not signed:
-                format_character = format_character.upper()
-
-            format_string += format_character
-        else:
-            if signed:
-                format_string = 'int'
-            else:
-                format_string = 'uint'
-
-            if length % 8 == 0:
-                if endianness == LITTLE_ENDIAN:
-                    format_string += 'le'
-                else:
-                    format_string += 'be'
-
-            format_string += ':%d' % (length)
-
-        return format_string
-
-    format_strings = {
-        LITTLE_ENDIAN: _gen_format_string(LITTLE_ENDIAN),
-        BIG_ENDIAN: _gen_format_string(BIG_ENDIAN)
-    }
-
-    def integer_type_read(reader, endianness = LITTLE_ENDIAN, offset = 0,
-                          **kwargs):
-        return reader.read(format_strings[endianness]) + offset
-
-    def integer_type_write(writer, val, endianness = LITTLE_ENDIAN,
-                           offset = 0, **kwargs):
-        if simple_length:
-            bytes_to_write = bytearray(
-                struct.pack(format_strings[endianness], val - offset))
-        else:
-            bytes_to_write = bytearray(
-                pack(format_strings[endianness], val - offset).tobytes())
-
-        writer.write(bytes_to_write, length)
-
-
-    return field_descriptor(integer_type_read, integer_type_write, length)
-
-uint8  = intX(length=8,  signed=False)
-byte = uint8
-uint16 = intX(length=16, signed=False)
-uint32 = intX(length=32, signed=False)
-uint64 = intX(length=64, signed=False)
-int8   = intX(length=8,  signed=True)
-int16  = intX(length=16, signed=True)
-int32  = intX(length=32, signed=True)
-int64  = intX(length=64, signed=True)
-bit = intX(1, signed=False)
-semi_nibble = intX(2, signed=False)
-nibble = intX(4, signed=False)
-
-def string(length, **kwargs):
-    string_length = length * 8
-
-    def string_parser(reader, **kwargs):
-        return struct.unpack(
-            "%ds" % (length), reader.read(string_length).tobytes())[0]
-
-    def string_writer(writer, value, **kwargs):
-        if isinstance(value, str):
-            writer.write(bytearray(value, "utf-8"), string_length)
-        else:
-            writer.write(bytearray(value), string_length)
-
-
-    return field_descriptor(string_parser, string_writer, length * 8)
-
-def _boolean_reader(reader, **kwargs):
-    return reader.read(1).bool
-
-def _boolean_writer(writer, value, **kwargs):
-    if value:
-        bool_as_int = 0b10000000
-    else:
-        bool_as_int = 0
-
-    writer.write([bool_as_int], 1)
-
-boolean = field_descriptor(_boolean_reader, _boolean_writer, 1)
-
-def make_pad_writer(length):
-    def pad_writer(writer, value, **kwargs):
-        writer.write(bytearray([0] * int((length + 7) / 8)), length)
-
-    return pad_writer
-
-def padding(length):
-    def pad_parser(reader, **kwargs):
-        # Skip over bits
-        reader.read(length)
-        return None
-
-    return field_descriptor(pad_parser, make_pad_writer(length), length)
-
-def enum(length, values, default=None):
-    subparser = intX(length=length, signed=False)
-
-    def parser(reader, **kwargs):
-        coded_value = subparser(READ, reader, None)
-
-        if coded_value not in values:
-            if default is not None:
-                return default
-            else:
-                raise ValueError(
-                    "Value '%s' does not correspond to a valid enum value" %
-                    (coded_value))
-        else:
-            return values[coded_value]
-
-    def writer(writer, value, **kwargs):
-        for coded_value in values:
-            if values[coded_value] == value:
-                subparser(WRITE, writer, coded_value)
-                break
-
-    return field_descriptor(parser, writer, length)
-
-def array(length, substruct):
-    def parser(reader, **kwargs):
-        if type(substruct) == list:
-            # Passed a nested struct, which should be parsed according to its
-            # spec
-            subparse_function = functools.partial(
-                parse_from_reader, reader=reader, spec=substruct)
-        else:
-            # Passed a parsing function; should just return whatever that thing
-            # parses
-            subparse_function = functools.partial(
-                substruct, _operation=READ, _target=reader, _data=None)
-
-        substructs = []
-
-        for i in range(length):
-            substructs.append(subparse_function(**kwargs))
-
-        return substructs
-
-    def writer(writer, values, **kwargs):
-        format_string_pieces = []
-        data_values = []
-
-        for value in values:
-            if type(substruct) == list:
-                subparse_function = functools.partial(
-                    write_from_parsed, writer=writer, obj=value, spec=substruct)
-            else:
-                subparse_function = functools.partial(
-                    substruct, _operation=WRITE, _target=writer, _data=value)
-
-            subparse_function(**kwargs)
-
-
-    # Returning None for length, since we can't know what the length is going
-    # to be without looking ahead
-    return field_descriptor(parser, writer, None)
-
-def _append_compressed_piece(piece, count, compressed_pieces):
-    if piece[0] in ('<', '>'):
-        if count > 1:
-            compressed_pieces.append(piece[0] + str(count) + piece[-1])
-        else:
-            compressed_pieces.append(piece)
-    else:
-        for i in range(count):
-            compressed_pieces.append(piece)
-
-
-def compress_format_string(pieces):
-    prev_piece = None
-    prev_count = 0
-
-    compressed_pieces = []
-
-    for piece in pieces:
-        if piece[0] in ('<', '>') and len(piece) > 2:
-            cur_piece = piece[0] + piece[-1]
-            cur_count = int(piece[1:-1])
-        else:
-            cur_piece = piece
-            cur_count = 1
-
-        if cur_piece == prev_piece:
-            prev_count += cur_count
-        else:
-            if prev_piece is not None:
-                _append_compressed_piece(
-                    prev_piece, prev_count, compressed_pieces)
-
-            prev_piece = cur_piece
-            prev_count = cur_count
-
-    if prev_piece is not None:
-        _append_compressed_piece(prev_piece, prev_count, compressed_pieces)
-
-    return compressed_pieces
