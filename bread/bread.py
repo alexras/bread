@@ -102,6 +102,7 @@ class BreadConditional(object):
         self._parent_struct = parent_struct
         self._conditional_field_name = conditional_field_name
         self._conditions = {}
+        self._name = None
 
 
     def _set_data(self, data_bits):
@@ -354,7 +355,7 @@ class BreadStruct(object):
         except CreationError as e:
             raise ValueError('Error while setting %s: %s' % (field._name, e))
 
-    def _add_field(self, field, name=None):
+    def _add_field(self, field, name):
         if name is not None:
             self._fields[name] = field
             field._name = name
@@ -377,7 +378,9 @@ class BreadStruct(object):
         native_struct = {}
 
         for field in self._field_list:
-            if field._name is not None:
+            if isinstance(field, BreadConditional):
+                native_struct.update(field.as_native())
+            elif field._name[0] != '_':
                 native_struct[field._name] = field.as_native()
             elif isinstance(field, BreadConditional):
                 native_struct.update(field.as_native())
@@ -562,6 +565,8 @@ def build_struct(spec, type_name=None):
         '_parent': struct
     }
 
+    unnamed_fields = 0
+
     # Read specification one line at a time, greedily consuming bits from the
     # stream as you go
     for spec_line in spec:
@@ -579,14 +584,19 @@ def build_struct(spec, type_name=None):
                 field = spec_line[0]
 
             # Don't give the field a name
-            struct._add_field(field(**global_options))
+            struct._add_field(
+                field(**global_options), '_unnamed_%d' % (unnamed_fields))
+            unnamed_fields += 1
 
         elif spec_line[0] == CONDITIONAL:
             predicate_field_name, conditions = spec_line[1:]
 
             field = BreadConditional.from_spec(spec_line, struct)
 
-            struct._add_field(field)
+            struct._add_field(
+                field, '_conditional_on_%s_%d' %
+                (predicate_field_name, unnamed_fields))
+            unnamed_fields += 1
         else:
             field_name = spec_line[0]
             field = spec_line[1]
