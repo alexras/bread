@@ -1,5 +1,5 @@
 import types, collections, functools, json
-from bitstring import BitArray, pack
+from bitstring import BitArray, pack, InterpretError
 
 from .vendor.six.moves import range
 
@@ -34,7 +34,7 @@ class BreadField(object):
 
         self._str_format = str_format
 
-        self.name = None
+        self._name = None
 
     @property
     def length(self):
@@ -53,7 +53,7 @@ class BreadField(object):
 
         return self._cached_value
 
-    def as_json(self):
+    def as_native(self):
         return self.get()
 
     def __str__(self):
@@ -70,9 +70,6 @@ class BreadField(object):
         return BreadField(self._length, self._encode_fn, self._decode_fn,
                           self._str_format)
 
-BREAD_CONDITIONAL_RESERVED_FIELDS = (
-    '_parent_struct', '_conditional_field_name', '_conditions')
-
 class BreadConditional(object):
     def __init__(self, conditional_field_name, parent_struct):
         self._parent_struct = parent_struct
@@ -85,10 +82,11 @@ class BreadConditional(object):
             struct._set_data(data_bits)
 
     def _add_condition(self, predicate_value, struct):
-        self.conditions[predicate_value] = struct
+        self._conditions[predicate_value] = struct
 
     def _get_condition(self):
-        switch_value = self._parent_struct.get(self._conditional_field_name)
+        switch_value = getattr(
+            self._parent_struct, self._conditional_field_name)
 
         if switch_value not in self._conditions:
             raise AttributeError("No known conditional case '%s'" %
@@ -97,19 +95,20 @@ class BreadConditional(object):
         return switch_value
 
     def __getattr__(self, attr):
-        if attr in BREAD_CONDITIONAL_RESERVED_FIELDS:
-            return super(BreadConditional, self).__getattr__(attr)
-        else:
-            return self._conditions[self._get_condition()].__getattr__(attr)
+        return self._conditions[self._get_condition()].__getattr__(attr)
 
     def __setattr__(self, attr, value):
-        if attr in BREAD_CONDITIONAL_RESERVED_FIELDS:
-            return super(BreadConditional, self).__setattr__(attr, value)
+        if attr[0] == '_':
+            super(BreadConditional, self).__setattr__(attr, value)
         else:
             self._conditions[self._get_condition()].__setattr__(attr, value)
 
-    def as_json(self):
-        return self._conditions[self._get_condition()].as_json()
+    @property
+    def length(self):
+        return self._conditions[0].length
+
+    def as_native(self):
+        return self._conditions[self._get_condition()].as_native()
 
     @property
     def _offset(self):
@@ -117,7 +116,7 @@ class BreadConditional(object):
 
     @_offset.setter
     def _offset(self, off):
-        for condition_struct in self._conditions:
+        for condition_struct in self._conditions.values():
             condition_struct._offset = off
 
     def copy(self):
@@ -133,7 +132,7 @@ class BreadArray(object):
     def __init__(self, num_items, item_template):
         self._items = []
         self._num_items = num_items
-        self.name = None
+        self._name = None
 
         if item_template is not None:
             for i in range(num_items):
@@ -183,8 +182,8 @@ class BreadArray(object):
         array_copy = BreadArray(self._num_items, self._items[0])
         return array_copy
 
-    def as_json(self):
-        return map(lambda item: item.as_json(), self._items)
+    def as_native(self):
+        return map(lambda item: item.as_native(), self._items)
 
     def _set_data(self, data_bits):
         for item in self._items:
@@ -202,17 +201,13 @@ class BreadArray(object):
             item._offset = offset
             offset += item.length
 
-BREAD_STRUCT_RESERVED_FIELDS = (
-    '_fields', '_field_list', '_data_bits', '_add_field', '__offsets__',
-    '_conditional_fields', '_LENGTH', '_offset', 'name')
-
 class BreadStruct(object):
     def __init__(self):
         self._data_bits = None
         self._fields = {}
         self._conditional_fields = []
         self._field_list = []
-        self.name = None
+        self._name = None
 
         # __offsets__ retained for backwards compatibility
         class Offsets(object):
@@ -242,8 +237,8 @@ class BreadStruct(object):
             if isinstance(field, BreadStruct):
                 field_strings.append(indent_text(str(field)))
             else:
-                if field.name is not None:
-                    field_strings.append(field.name + ': ' + str(field))
+                if field._name is not None:
+                    field_strings.append(field._name + ': ' + str(field))
                 else:
                     field_strings.append(str(field))
 
@@ -284,34 +279,34 @@ class BreadStruct(object):
         raise ValueError("Can't set a non-leaf struct to a value")
 
     def __getattr__(self, attr):
-        if attr in BREAD_STRUCT_RESERVED_FIELDS:
-            return super(BreadStruct, self).__getattr__(attr)
+        try:
+            if attr in self._fields:
+                return self._fields[attr].get()
 
-        if attr in self._fields:
-            return self._fields[attr].get()
-
-        for conditional_field in self._conditional_fields:
-            try:
-                return getattr(conditional_field, attr)
-            except AttributeError:
-                pass
+            for conditional_field in self._conditional_fields:
+                try:
+                    return getattr(conditional_field, attr)
+                except AttributeError:
+                    pass
+        except InterpretError as e:
+            raise AttributeError(
+                "Error while retrieving field '%s': %s" % (attr, e))
 
         raise AttributeError("No known field '%s'" % (attr))
 
     def __setattr__(self, attr, value):
-        if attr in BREAD_STRUCT_RESERVED_FIELDS:
-            return super(BreadStruct, self).__setattr__(attr, value)
-
-        if attr not in self._fields:
+        if attr[0] == '_':
+            super(BreadStruct, self).__setattr__(attr, value)
+        elif attr not in self._fields:
             raise AttributeError("No known field '%s'" % (attr))
-
-        field = self._fields[attr]
-        field.set(value)
+        else:
+            field = self._fields[attr]
+            field.set(value)
 
     def _add_field(self, field, name=None):
         if name is not None:
             self._fields[name] = field
-            field.name = name
+            field._name = name
 
         self._field_list.append(field)
 
@@ -320,54 +315,66 @@ class BreadStruct(object):
 
     def copy(self):
         copy = BreadStruct()
-        copy.name = self.name
+        copy._name = self._name
 
         for field in self._field_list:
-            copy._add_field(field.copy(), field.name)
+            copy._add_field(field.copy(), field._name)
 
         return copy
 
-    def as_json(self):
-        json_struct = {}
+    def as_native(self):
+        native_struct = {}
 
         for field in self._field_list:
-            if field.name is not None:
-                json_struct[field.name] = field.as_json()
+            if field._name is not None:
+                native_struct[field._name] = field.as_native()
 
-        return json.dumps(json_struct)
+        return native_struct
 
-    def as_native(self):
-        # FIXME FINISH
-        pass
+    def as_json(self):
+        return json.dumps(self.as_native())
 
 
 # BEGIN TYPE INFORMATION
 
 def intX(length, signed=False):
     def make_intX_field(**field_options):
-        int_type_key = None
+        if length % 8 == 0 and length >= 8:
+            int_type_key = None
 
-        if signed:
-            int_type_key = 'int'
+            if signed:
+                int_type_key = 'int'
+            else:
+                int_type_key = 'uint'
+
+            if field_options.get('endianness', None) == BIG_ENDIAN:
+                int_type_key += 'be'
+            else:
+                int_type_key += 'le'
+
+            offset = field_options.get('offset', 0)
+
+            def encode_intX(value):
+                options = {}
+                options[int_type_key] = value
+                options['length'] = length
+
+                return BitArray(**options)
+
+            def decode_intX(encoded):
+                return getattr(encoded, int_type_key) + offset
         else:
-            int_type_key = 'uint'
+            def encode_intX(value):
+                if signed:
+                    return BitArray(int=value, length=length)
+                else:
+                    return BitArray(uint=value, length=length)
 
-        if field_options.get('endianness', None) == LITTLE_ENDIAN:
-            int_type_key += 'le'
-        else:
-            int_type_key += 'be'
-
-        offset = field_options.get('offset', 0)
-
-        def encode_intX(value):
-            options = {}
-            options[int_type_key] = value
-            options['length'] = length
-
-            return BitArray(**options)
-
-        def decode_intX(encoded):
-            return getattr(encoded, int_type_key) + offset
+            def decode_intX(encoded):
+                if signed:
+                    return encoded.int
+                else:
+                    return encoded.uint
 
         return BreadField(
             length, encode_intX, decode_intX,
@@ -538,9 +545,14 @@ def parse(data_source, spec, type_name='bread_struct'):
 
     return struct
 
-def write(parsed_obj, spec, filename=None):
+def write(parsed_obj, spec=None, filename=None):
+    """Writes an object created by `parse` to either a file or a bytearray.
+
+    If the object doesn't end on a byte boundary, zeroes are appended to it
+    until it does.
+    """
     if filename is not None:
         with open(filename, 'wb') as fp:
             parsed_obj._data_bits.tofile(fp)
     else:
-        return parsed_obj._data_bits.tobytes()
+        return bytearray(parsed_obj._data_bits.tobytes())
