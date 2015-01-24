@@ -72,6 +72,18 @@ class BreadField(object):
                           self._str_format)
 
 class BreadConditional(object):
+    @staticmethod
+    def from_spec(spec, parent_struct):
+        predicate_field_name, conditions = spec[1:]
+
+        field = BreadConditional(predicate_field_name, parent_struct)
+
+        for predicate_value, condition in list(conditions.items()):
+            condition_struct = build_struct(condition)
+            field._add_condition(predicate_value, condition_struct)
+
+        return field
+
     def __init__(self, conditional_field_name, parent_struct):
         self._parent_struct = parent_struct
         self._conditional_field_name = conditional_field_name
@@ -95,7 +107,7 @@ class BreadConditional(object):
         return switch_value
 
     def __getattr__(self, attr):
-        return self._conditions[self._get_condition()].__getattr__(attr)
+        return getattr(self._conditions[self._get_condition()], attr)
 
     def __setattr__(self, attr, value):
         if attr[0] == '_':
@@ -123,7 +135,7 @@ class BreadConditional(object):
         copy = BreadConditional(
             self._conditional_field_name, self._parent_struct)
 
-        for condition, struct in self._conditions:
+        for condition, struct in self._conditions.items():
             copy._add_condition(condition, struct.copy())
 
         return copy
@@ -504,6 +516,9 @@ def array(length, substruct):
     def make_array_field(**field_options):
         if type(substruct) == list:
             built_substruct = build_struct(spec=substruct)
+        elif type(substruct) == tuple and substruct[0] == CONDITIONAL:
+            built_substruct = BreadConditional.from_spec(
+                substruct, field_options['_parent'])
         else:
             built_substruct = substruct()
 
@@ -523,7 +538,9 @@ def build_struct(spec, type_name=None):
 
     struct = NewStruct()
 
-    global_options = {}
+    global_options = {
+        '_parent': struct
+    }
 
     # Read specification one line at a time, greedily consuming bits from the
     # stream as you go
@@ -547,11 +564,7 @@ def build_struct(spec, type_name=None):
         elif spec_line[0] == CONDITIONAL:
             predicate_field_name, conditions = spec_line[1:]
 
-            field = BreadConditional(predicate_field_name, struct)
-
-            for predicate_value, condition in list(conditions.items()):
-                condition_struct = build_struct(condition)
-                field._add_condition(predicate_value, condition_struct)
+            field = BreadConditional.from_spec(spec_line, struct)
 
             struct._add_field(field)
         else:

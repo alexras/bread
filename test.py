@@ -378,6 +378,136 @@ def test_conditional_set():
 
     assert_equal(written_bytes, expected_bytes)
 
+@raises(b.BadConditionalCaseError)
+def test_conditional_bad_switch():
+    test_struct = [
+        ("cond", b.uint8),
+        (b.CONDITIONAL, "cond", {
+            1: [("foo", b.uint8)],
+            2: [("foo", b.uint8)],
+            4: [("foo", b.uint8)]
+        })
+    ]
+
+    test_data = bytearray([3, 9])
+    test_parsed = b.parse(test_data, test_struct)
+
+    test_parsed.foo = 12
+
+def test_as_native():
+    data = bitstring.BitArray(bytearray(range(34)))
+    data.append('0b0')
+
+    supernested_test = b.parse(data, deeply_nested_struct)
+    assert_equal(supernested_test.as_native(), {
+        'ubermatrix': [
+            {
+                'first': 0,
+                'matrix': [[1,2,3], [4,5,6], [7,8,9]],
+                'last': 10
+            },
+            {
+                'first': 11,
+                'matrix': [[12, 13, 14], [15, 16, 17], [18, 19, 20]],
+                'last': 21
+            },
+            {
+                'first': 22,
+                'matrix': [[23, 24, 25], [26, 27, 28], [29, 30, 31]],
+                'last': 32
+            }
+        ],
+        'dummy': {
+            'length': 33,
+            'ok': False
+        }
+    })
+
+def test_array_of_conditionals():
+    test_struct = [
+        ("cond", b.uint8),
+        ("foos", b.array(3, (b.CONDITIONAL, "cond", {
+            1: [("foo", b.uint8)],
+            2: [("bar", b.uint8)],
+            4: [("baz", b.uint8)]
+        })))
+    ]
+
+    test_data = bytearray([1, 5, 6, 8])
+
+    test_parsed = b.parse(test_data, test_struct)
+
+    assert_equal(test_parsed.cond, 1)
+    assert_equal(test_parsed.foos[0].foo, 5)
+    assert_equal(test_parsed.foos[1].foo, 6)
+    assert_equal(test_parsed.foos[2].foo, 8)
+
+    test_parsed.cond = 4
+
+    assert_equal(test_parsed.cond, 4)
+    assert_equal(test_parsed.foos[0].baz, 5)
+    assert_equal(test_parsed.foos[1].baz, 6)
+    assert_equal(test_parsed.foos[2].baz, 8)
+
+@raises(ValueError)
+def test_set_non_leaf_value_fails():
+    data = bitstring.BitArray(bytearray(range(34)))
+    data.append('0b0')
+
+    supernested_test = b.parse(data, deeply_nested_struct)
+
+    supernested_test.ubermatrix = 5
+
+def test_multiple_conditionals():
+    test_struct = [
+        ("cond", b.uint8),
+        (b.CONDITIONAL, "cond", {
+            1: [("foo", b.uint8)],
+            2: [("foo", b.uint8)],
+            4: [("foo", b.uint8)]
+        }),
+        (b.CONDITIONAL, "cond", {
+            1: [("qux", b.uint8)],
+            2: [("buzz", b.uint8)],
+            4: [("fuzz", b.uint8)]
+        })
+    ]
+
+    test_data = bytearray([1, 2, 4])
+    test_parsed = b.parse(test_data, test_struct)
+
+    assert_equal(test_parsed.foo, 2)
+    assert_equal(test_parsed.qux, 4)
+
+
+def test_set_sub_byte_intX():
+    test_struct = [
+        ("nibble", b.nibble),
+        ("bit1", b.bit),
+        ("bit2", b.bit),
+        ("seminibble", b.semi_nibble)
+    ]
+
+    test_data = bytearray([0xdb])
+
+    test_parsed = b.parse(test_data, test_struct)
+
+    test_parsed.bit1 = 0
+    test_parsed.seminibble = 2
+
+    assert_equal(bytearray([0xd2]), b.write(test_parsed))
+
+def test_parse_str():
+    test_struct = [
+        ("str", b.string(13))
+    ]
+
+    test_str = str("gabbagabbahey")
+
+    test_parsed = b.parse(test_str, test_struct)
+
+    assert_equal(test_parsed.str, "gabbagabbahey")
+
 def test_str():
     str_test = [("msg", b.string(5))]
 
@@ -722,7 +852,7 @@ def test_nested_struct_str():
         '      matrix: [[23, 24, 25], [26, 27, 28], [29, 30, 31]]',
         '      last: 32',
         '    }]',
-        '    {',
+        '  dummy: {',
         '      length: 33',
         '      ok: False',
         '    }',
