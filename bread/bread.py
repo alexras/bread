@@ -45,6 +45,15 @@ class BreadField(object):
     def _set_data(self, data_bits):
         self._data_bits = data_bits
 
+    def __eq__(self, other):
+        if not isinstance(other, BreadField):
+            return False
+
+        return self.get() == other.get()
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def get(self):
         if self._cached_value is None:
             start_bit = self._offset
@@ -193,6 +202,10 @@ class BreadArray(object):
                 return False
 
         return True
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def get(self):
         return self
 
@@ -315,7 +328,7 @@ class BreadStruct(object):
             try:
                 return getattr(conditional_field, attr)
             except AttributeError:
-                pass
+                pass #pragma: no cover
 
         raise AttributeError("No known field '%s'" % (attr))
 
@@ -362,6 +375,8 @@ class BreadStruct(object):
         for field in self._field_list:
             if field._name is not None:
                 native_struct[field._name] = field.as_native()
+            elif isinstance(field, BreadConditional):
+                native_struct.update(field.as_native())
 
         return native_struct
 

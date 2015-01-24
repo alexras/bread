@@ -347,6 +347,27 @@ def test_conditional():
     assert_equal(b.write(false_test, conditional_test),
                  bytearray([0b01001000, 0b10000000, 0b10000000]))
 
+def test_conditional_as_native():
+    true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
+    true_data.append('0b0')
+
+    test_struct = b.parse(true_data, conditional_test)
+
+    assert_equal(test_struct.as_native(), {
+        'qux': True,
+        'frooz': 0b1001,
+        'quxz': 0b01011101
+    })
+
+    test_struct.qux = False
+
+    assert_equal(test_struct.as_native(), {
+        'qux': False,
+        'fooz': 0b10010101,
+        'barz': 0b11010000
+    })
+
+
 def test_conditional_set():
     true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
     true_data.append('0b0')
@@ -451,12 +472,19 @@ def test_array_of_conditionals():
 
 @raises(ValueError)
 def test_set_non_leaf_value_fails():
-    data = bitstring.BitArray(bytearray(range(34)))
-    data.append('0b0')
+    struct_in_a_struct = [
+        ("simple", [
+            ("fooz", b.uint8),
+            ("mooz", b.uint8),
+            ("shooz", b.uint8)
+        ])
+    ]
 
-    supernested_test = b.parse(data, deeply_nested_struct)
+    data = bitstring.BitArray(bytearray([1,2,3]))
 
-    supernested_test.ubermatrix = 5
+    nested_set_test = b.parse(data, struct_in_a_struct)
+
+    nested_set_test.simple = 5
 
 def test_multiple_conditionals():
     test_struct = [
@@ -482,7 +510,7 @@ def test_multiple_conditionals():
 
 def test_set_sub_byte_intX():
     test_struct = [
-        ("nibble", b.nibble),
+        ("signed_nibble", b.intX(4, signed=True)),
         ("bit1", b.bit),
         ("bit2", b.bit),
         ("seminibble", b.semi_nibble)
@@ -491,11 +519,13 @@ def test_set_sub_byte_intX():
     test_data = bytearray([0xdb])
 
     test_parsed = b.parse(test_data, test_struct)
+    assert_equal(test_parsed.signed_nibble, -3)
 
+    test_parsed.signed_nibble = -6
     test_parsed.bit1 = 0
     test_parsed.seminibble = 2
 
-    assert_equal(bytearray([0xd2]), b.write(test_parsed))
+    assert_equal(bytearray([0xa2]), b.write(test_parsed))
 
 def test_parse_str():
     test_struct = [
@@ -813,9 +843,12 @@ def test_array_eq():
     assert_not_equal(first_test_parsed, second_test_parsed)
 
     first_test_parsed_copy = b.parse(first_test_data, first_test_struct)
+    assert_equal(first_test_parsed.nums, first_test_parsed_copy.nums)
+
     first_test_parsed_copy.nums[2] = 100
 
     assert_not_equal(first_test_parsed, first_test_parsed_copy)
+    assert_not_equal(first_test_parsed.nums, first_test_parsed_copy.nums)
 
 
 def test_str():
