@@ -1,5 +1,5 @@
 import types, collections, functools, json
-from bitstring import BitArray, pack, InterpretError, CreationError
+from bitstring import BitArray, pack, CreationError
 
 from .vendor.six.moves import range
 
@@ -10,6 +10,11 @@ CONDITIONAL = 2
 # Enumeration of different operations that field descriptors can perform
 READ = 0
 WRITE = 1
+
+class BadConditionalCaseError(Exception):
+    def __init__(self, case):
+        super(BadConditionalCaseError, self).__init__(
+            "No known conditional case '%s'" % (case))
 
 def indent_text(string, indent_level=2):
     """Indent every line of text in a newline-delimited string"""
@@ -85,8 +90,7 @@ class BreadConditional(object):
             self._parent_struct, self._conditional_field_name)
 
         if switch_value not in self._conditions:
-            raise AttributeError("No known conditional case '%s'" %
-                                 (str(switch_value)))
+            raise BadConditionalCaseError(str(switch_value))
 
         return switch_value
 
@@ -107,7 +111,7 @@ class BreadConditional(object):
         return self._conditions[self._get_condition()].as_native()
 
     @property
-    def _offset(self):
+    def _offset(self): #pragma: no cover
         return self._conditions[list(self._conditions.keys())[0]]._offset
 
     @_offset.setter
@@ -249,12 +253,10 @@ class BreadStruct(object):
 
         for field in self._field_list:
             if isinstance(field, BreadStruct):
-                field_strings.append(indent_text(str(field)))
+                field_strings.append(
+                    field._name + ': ' + indent_text(str(field)).lstrip())
             else:
-                if field._name is not None:
-                    field_strings.append(field._name + ': ' + str(field))
-                else:
-                    field_strings.append(str(field))
+                field_strings.append(field._name + ': ' + str(field))
 
         return '{\n' + '\n'.join(map(indent_text, field_strings)) + '\n}'
 
@@ -293,18 +295,14 @@ class BreadStruct(object):
         raise ValueError("Can't set a non-leaf struct to a value")
 
     def __getattr__(self, attr):
-        try:
-            if attr in self._fields:
-                return self._fields[attr].get()
+        if attr in self._fields:
+            return self._fields[attr].get()
 
-            for conditional_field in self._conditional_fields:
-                try:
-                    return getattr(conditional_field, attr)
-                except AttributeError:
-                    pass
-        except InterpretError as e:
-            raise AttributeError(
-                "Error while retrieving field '%s': %s" % (attr, e))
+        for conditional_field in self._conditional_fields:
+            try:
+                return getattr(conditional_field, attr)
+            except AttributeError:
+                pass
 
         raise AttributeError("No known field '%s'" % (attr))
 
