@@ -2,7 +2,8 @@
 
 import struct, sys, pprint, unittest, itertools, tempfile, os, json
 
-from nose.tools import assert_equal, assert_not_equal, assert_true, assert_false
+from nose.tools import assert_equal, assert_not_equal, assert_true, \
+    assert_false, assert_raises
 
 import bread as b
 
@@ -359,13 +360,13 @@ def test_enum():
         assert_equal(result.suit, suit)
         assert_equal(b.write(result, enum_test), data)
 
-    try:
+
+    def get_data_field():
         data = bytearray([42])
         result = b.parse(data, enum_test)
-        assert False, "Failed to throw an error"
-    except ValueError as e:
-        # expected
-        pass
+        result.suit
+
+    assert_raises(ValueError, get_data_field)
 
 def test_enum_default():
     enum_test = [
@@ -458,13 +459,15 @@ def test_non_powers_of_eight_intX():
     assert_equal(b.write(result, intX_test), in_bytes)
 
 def test_read_modify_write():
-    data = bytearray(list(range(36)))
+    data = bitstring.BitArray(bytearray(range(34)))
+    data.append('0b0')
 
     supernested_test = b.parse(data, deeply_nested_struct)
 
     assert_equal(supernested_test.ubermatrix[1].matrix[2][1], 19)
 
     supernested_test.ubermatrix[1].matrix[2][1] = 42
+    assert_equal(supernested_test.ubermatrix[1].matrix[2][1], 42)
 
     written_data = b.write(supernested_test, deeply_nested_struct)
 
