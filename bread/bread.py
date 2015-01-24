@@ -473,7 +473,7 @@ def enum(length, values, default=None):
 
         def encode_enum(key):
             if key not in keys:
-                raise ValueError('%s is not a valid enum value' % (value))
+                raise ValueError('%s is not a valid enum value' % (key))
 
             return old_encode_fn(keys[key])
 

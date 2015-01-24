@@ -99,6 +99,29 @@ def test_simple_struct():
 
     assert_equal(json.loads(test.as_json()), expected_json_struct)
 
+def test_write_intX():
+    ints_struct = [
+        ("off_by_one", b.uint8, {"offset": 1}),
+        ("unsigned_int", b.uint16),
+        ("signed_int", b.int8)
+    ]
+
+    data = bytearray([5, 0xba, 0xbd, 0xed])
+    parsed = b.parse(data, ints_struct)
+
+    assert_equal(parsed.off_by_one, 6)
+    assert_equal(parsed.unsigned_int, 0xbdba)
+    assert_equal(parsed.signed_int, -19)
+
+    parsed.off_by_one = 9
+    parsed.unsigned_int = 0xcbab
+    parsed.signed_int = -7
+
+    output = b.write(parsed)
+
+    assert_equal(output, bytearray([8, 0xab, 0xcb, 0xf9]))
+
+
 def test_updates_do_not_leak():
     data = struct.pack(">IqQb", 0xafb3dddd, -57, 90, 0)
     data2 = struct.pack(">IqQb", 0x1de0fafe, 24, 999999, 1)
@@ -397,6 +420,23 @@ def test_enum_default():
 
     assert_equal(result.suit, "spades")
 
+@raises(ValueError)
+def test_enum_set_invalid_value():
+    enum_test = [
+        ("suit", b.enum(8, {
+            0: "diamonds",
+            1: "hearts",
+            2: "spades",
+            3: "clubs"
+        }, default="joker"))]
+
+    data = bytearray([1])
+    parsed = b.parse(data, enum_test)
+
+    assert_equal("hearts", parsed.suit)
+
+    parsed.suit = "skulls"
+
 def test_conditional_on_non_integer_enum():
     enum_test = [
         ("instrument_type", b.enum(8, {
@@ -542,6 +582,13 @@ def test_invalid_field_get_raises():
 
     test.missingfield
 
+@raises(AttributeError)
+def test_invalid_field_set_raises():
+    data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
+    test = b.parse(data, spec=test_struct)
+
+    test.missingfield = 12
+
 @raises(ValueError)
 def test_too_small_struct_fails():
     data = "X".encode('utf-8')
@@ -584,3 +631,14 @@ def test_set_array_to_list():
 
     assert_equal(output_bytes, bytearray(
         [42, 2, 4, 6, 9, 8, 7, 14, 16, 18, 0xdb]))
+
+def test_str():
+    data = bytearray([42, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0xdb])
+
+    nested_test = b.parse(data, nested_array_struct)
+
+    assert_equal(str(nested_test), """{
+  first: 42
+  matrix: [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
+  last: 219
+}""")
