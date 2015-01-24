@@ -11,6 +11,17 @@ CONDITIONAL = 2
 READ = 0
 WRITE = 1
 
+def indent_text(string, indent_level=2):
+    """Indent every line of text in a newline-delimited string"""
+    indented_lines = []
+
+    indent_spaces = ' ' * indent_level
+
+    for line in string.split('\n'):
+        indented_lines.append(indent_spaces + line)
+
+    return '\n'.join(indented_lines)
+
 class BreadField(object):
     def __init__(self, length, encode_fn, decode_fn, str_format):
         self._data_bits = None
@@ -44,6 +55,9 @@ class BreadField(object):
 
     def as_json(self):
         return self.get()
+
+    def __str__(self):
+        return str(self.get())
 
     def set(self, value):
         value_bits = self._encode_fn(value)
@@ -124,6 +138,20 @@ class BreadArray(object):
         if item_template is not None:
             for i in range(num_items):
                 self._items.append(item_template.copy())
+
+    def __str__(self):
+        string_repr = '['
+
+        if self._num_items > 0:
+            if isinstance(self._items[0], BreadStruct):
+                str_function =  lambda x: '\n' + indent_text(str(x))
+            else:
+                str_function = str
+            string_repr += ', '.join(map(str_function, self._items))
+
+        string_repr += ']'
+
+        return string_repr
 
     @property
     def length(self):
@@ -208,13 +236,18 @@ class BreadStruct(object):
         return self._LENGTH
 
     def __str__(self):
-        string = '\n'
+        field_strings = []
 
         for field in self._field_list:
-            string += str(field) + '\n'
+            if isinstance(field, BreadStruct):
+                field_strings.append(indent_text(str(field)))
+            else:
+                if field.name is not None:
+                    field_strings.append(field.name + ': ' + str(field))
+                else:
+                    field_strings.append(str(field))
 
-    def __repr__(self):
-        return self.__str__(self)
+        return '{\n' + '\n'.join(map(indent_text, field_strings)) + '\n}'
 
     def _set_data(self, data_bits):
         self._data_bits = data_bits
@@ -243,6 +276,12 @@ class BreadStruct(object):
     @property
     def _LENGTH(self):
         return sum(map(lambda x: x.length, self._field_list))
+
+    def get(self):
+        return self
+
+    def set(self, value):
+        raise ValueError("Can't set a non-leaf struct to a value")
 
     def __getattr__(self, attr):
         if attr in BREAD_STRUCT_RESERVED_FIELDS:
@@ -276,11 +315,15 @@ class BreadStruct(object):
 
         self._field_list.append(field)
 
+        if isinstance(field, BreadConditional):
+            self._conditional_fields.append(field)
+
     def copy(self):
         copy = BreadStruct()
+        copy.name = self.name
 
-        for name, field in self._fields.items():
-            copy._add_field(field.copy(), name)
+        for field in self._field_list:
+            copy._add_field(field.copy(), field.name)
 
         return copy
 
@@ -433,13 +476,9 @@ def build_struct(spec, type_name=None):
 
     global_options = {}
 
-    spec = collections.deque(spec)
-
     # Read specification one line at a time, greedily consuming bits from the
     # stream as you go
-    while len(spec) > 0:
-        spec_line = spec.popleft()
-
+    for spec_line in spec:
         if type(spec_line) == dict:
             # A dictionary in the spec indicates global options for parsing
             global_options = spec_line
@@ -505,30 +544,3 @@ def write(parsed_obj, spec, filename=None):
             parsed_obj._data_bits.tofile(fp)
     else:
         return parsed_obj._data_bits.tobytes()
-
-# def as_json(self):
-#     out_json = self.__json_repr()
-
-#     return json.dumps(out_json)
-
-# def as_native(self):
-#     return self.__json_repr()
-
-# def __element_json_repr(self, element):
-#     if hasattr(element, "__baked_by_bread__"):
-#         return element.__json_repr()
-#     else:
-#         return element
-
-# def __json_repr(self):
-#     out_json = {}
-
-#     for key, formatter in keys:
-#         val = getattr(self, key)
-
-#         if isinstance(val, list):
-#             out_json[key] = list(map(self.__element_json_repr, val))
-#         else:
-#             out_json[key] = self.__element_json_repr(val)
-
-#     return out_json
