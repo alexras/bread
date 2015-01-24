@@ -74,7 +74,7 @@ class BreadConditional(object):
 
 
     def _set_data(self, data_bits):
-        for struct in self._conditions.values():
+        for struct in list(self._conditions.values()):
             struct._set_data(data_bits)
 
     def _add_condition(self, predicate_value, struct):
@@ -101,18 +101,18 @@ class BreadConditional(object):
 
     @property
     def _length(self):
-        return self._conditions.values()[0]._length
+        return list(self._conditions.values())[0]._length
 
     def as_native(self):
         return self._conditions[self._get_condition()].as_native()
 
     @property
     def _offset(self):
-        return self._conditions[self._conditions.keys()[0]]._offset
+        return self._conditions[list(self._conditions.keys())[0]]._offset
 
     @_offset.setter
     def _offset(self, off):
-        for condition_struct in self._conditions.values():
+        for condition_struct in list(self._conditions.values()):
             condition_struct._offset = off
 
     def copy(self):
@@ -150,7 +150,7 @@ class BreadArray(object):
 
     @property
     def _length(self):
-        return sum(map(lambda x: x._length, self._items))
+        return sum([x._length for x in self._items])
 
     def __getitem__(self, index):
         return self._items[index].get()
@@ -163,7 +163,7 @@ class BreadArray(object):
 
     def __eq__(self, other):
         if isinstance(other, list):
-            return map(lambda x: x.get(), self._items) == other
+            return [x.get() for x in self._items] == other
 
         if not isinstance(other, BreadArray):
             return False
@@ -197,7 +197,7 @@ class BreadArray(object):
         return array_copy
 
     def as_native(self):
-        return map(lambda item: item.as_native(), self._items)
+        return [item.as_native() for item in self._items]
 
     def _set_data(self, data_bits):
         for item in self._items:
@@ -278,13 +278,13 @@ class BreadStruct(object):
             field._offset = offset
             offset += field._length
 
-        for name, field in self._fields.items():
+        for name, field in list(self._fields.items()):
             setattr(self.__offsets__, name, field._offset)
 
     # _LENGTH retained for backwards compatibility
     @property
     def _LENGTH(self):
-        return sum(map(lambda x: x._length, self._field_list))
+        return sum([x._length for x in self._field_list])
 
     def get(self):
         return self
@@ -540,7 +540,7 @@ def build_struct(spec, type_name=None):
 
             field = BreadConditional(predicate_field_name, struct)
 
-            for predicate_value, condition in conditions.items():
+            for predicate_value, condition in list(conditions.items()):
                 condition_struct = build_struct(condition)
                 field._add_condition(predicate_value, condition_struct)
 
