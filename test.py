@@ -893,6 +893,22 @@ def test_nested_struct_str():
 
     assert_equal(str(supernested_test), expected)
 
+def test_conditional_str():
+    true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
+    true_data.append('0b0')
+
+    test_struct = b.parse(true_data, conditional_test)
+
+    expected_lines = [
+        "{",
+        "  qux: True",
+        "  frooz: 9",
+        "  quxz: 93",
+        "}"]
+
+    assert_equal(str(test_struct), '\n'.join(expected_lines))
+
+
 @raises(ValueError)
 def test_write_non_obj():
     b.write("piiiineapples!")

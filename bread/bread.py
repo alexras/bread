@@ -137,6 +137,10 @@ class BreadConditional(object):
     def as_native(self):
         return self._conditions[self._get_condition()].as_native()
 
+    def __str__(self):
+        return '\n'.join(
+            self._conditions[self._get_condition()]._field_strings())
+
     @property
     def _offset(self): #pragma: no cover
         return self._conditions[list(self._conditions.keys())[0]]._offset
@@ -279,16 +283,22 @@ class BreadStruct(object):
     def _length(self):
         return self._LENGTH
 
-    def __str__(self):
+    def _field_strings(self):
         field_strings = []
 
         for field in self._field_list:
             if isinstance(field, BreadStruct):
                 field_strings.append(
                     field._name + ': ' + indent_text(str(field)).lstrip())
+            elif isinstance(field, BreadConditional):
+                field_strings.append(str(field))
             else:
                 field_strings.append(field._name + ': ' + str(field))
 
+        return field_strings
+
+    def __str__(self):
+        field_strings = self._field_strings()
         return '{\n' + '\n'.join(map(indent_text, field_strings)) + '\n}'
 
     def _set_data(self, data_bits):
