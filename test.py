@@ -6,6 +6,8 @@ from nose.tools import assert_equal, assert_not_equal, assert_true, assert_false
 
 import bread as b
 
+import bitstring
+
 # Shared structs for bread struct test
 
 test_struct = [
@@ -188,7 +190,8 @@ def test_nested_array():
     assert_equal(json.loads(nested_test.as_json()), expected_json_struct)
 
 def test_nested_struct():
-    data = bytearray(list(range(36)))
+    data = bitstring.BitArray(bytearray(range(34)))
+    data.append('0b0')
 
     supernested_test = b.parse(data, deeply_nested_struct)
 
@@ -197,6 +200,7 @@ def test_nested_struct():
     assert_equal(len(supernested_test), 273)
 
     assert_equal(len(supernested_test.ubermatrix), 3)
+    assert_equal(sum(map(len, supernested_test.ubermatrix)), 264)
 
     current_byte = 0
 
@@ -212,7 +216,7 @@ def test_nested_struct():
         assert_equal(substruct.last, current_byte)
         current_byte += 1
 
-    assert_equal(supernested_test.dummy.length, current_byte)
+    assert_equal(supernested_test.__offsets__.dummy, current_byte * 8)
     current_byte += 1
     assert_equal(supernested_test.dummy.ok, False)
 
