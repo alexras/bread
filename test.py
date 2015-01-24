@@ -892,3 +892,7 @@ def test_nested_struct_str():
         '}'])
 
     assert_equal(str(supernested_test), expected)
+
+@raises(ValueError)
+def test_write_non_obj():
+    b.write("piiiineapples!")

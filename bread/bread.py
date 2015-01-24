@@ -642,6 +642,11 @@ def write(parsed_obj, spec=None, filename=None):
     If the object doesn't end on a byte boundary, zeroes are appended to it
     until it does.
     """
+    if not isinstance(parsed_obj, BreadStruct):
+        raise ValueError(
+            'Object to write must be a structure created '
+            'by bread.parse')
+
     if filename is not None:
         with open(filename, 'wb') as fp:
             parsed_obj._data_bits.tofile(fp)
