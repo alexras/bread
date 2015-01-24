@@ -1,6 +1,7 @@
 import types, collections, functools, json
 from bitstring import BitArray, pack, CreationError
 
+from .vendor import six
 from .vendor.six.moves import range
 
 LITTLE_ENDIAN = 0
@@ -135,7 +136,7 @@ class BreadConditional(object):
         copy = BreadConditional(
             self._conditional_field_name, self._parent_struct)
 
-        for condition, struct in self._conditions.items():
+        for condition, struct in list(self._conditions.items()):
             copy._add_condition(condition, struct.copy())
 
         return copy
@@ -587,7 +588,7 @@ def build_struct(spec, type_name=None):
 
 def parse(data_source, spec, type_name='bread_struct'):
     if type(data_source) == str:
-        data_bits = BitArray(bytes=data_source)
+        data_bits = BitArray(bytes=six.b(data_source))
     elif type(data_source) == list:
         data_bits = BitArray(bytes=data_source)
     else:

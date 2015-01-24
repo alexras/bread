@@ -506,7 +506,7 @@ def test_parse_str():
 
     test_parsed = b.parse(test_str, test_struct)
 
-    assert_equal(test_parsed.str, "gabbagabbahey")
+    assert_equal(test_parsed.str.decode('utf-8'), "gabbagabbahey")
 
 def test_str():
     str_test = [("msg", b.string(5))]
