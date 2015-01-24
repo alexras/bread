@@ -1,5 +1,5 @@
 import types, collections, functools, json
-from bitstring import BitArray, pack, InterpretError
+from bitstring import BitArray, pack, InterpretError, CreationError
 
 from .vendor.six.moves import range
 
@@ -309,13 +309,16 @@ class BreadStruct(object):
         raise AttributeError("No known field '%s'" % (attr))
 
     def __setattr__(self, attr, value):
-        if attr[0] == '_':
-            super(BreadStruct, self).__setattr__(attr, value)
-        elif attr not in self._fields:
-            raise AttributeError("No known field '%s'" % (attr))
-        else:
-            field = self._fields[attr]
-            field.set(value)
+        try:
+            if attr[0] == '_':
+                super(BreadStruct, self).__setattr__(attr, value)
+            elif attr not in self._fields:
+                raise AttributeError("No known field '%s'" % (attr))
+            else:
+                field = self._fields[attr]
+                field.set(value)
+        except CreationError as e:
+            raise ValueError('Error while setting %s: %s' % (field._name, e))
 
     def _add_field(self, field, name=None):
         if name is not None:
@@ -445,7 +448,7 @@ def boolean(**field_options):
         1, encode_bool, decode_bool,
         str_format=field_options.get('str_format', None))
 
-def padding(length):
+def padding(length): # pragma: no cover
     def make_padding_field(**field_options):
         def encode_pad(value):
             return pack('pad:n', n=value)
@@ -466,11 +469,13 @@ def enum(length, values, default=None):
         old_encode_fn = enum_field._encode_fn
         old_decode_fn = enum_field._decode_fn
 
-        def encode_enum(value):
-            if value not in values:
-                raise ValueError('%d is not a valid enum value' % (value))
+        keys = {v: k for k, v in values.items()}
 
-            return old_encode_fn(values[value])
+        def encode_enum(key):
+            if key not in keys:
+                raise ValueError('%s is not a valid enum value' % (value))
+
+            return old_encode_fn(keys[key])
 
         def decode_enum(encoded):
             decoded_value = old_decode_fn(encoded)
@@ -572,6 +577,12 @@ def parse(data_source, spec, type_name='bread_struct'):
         data_bits = BitArray(data_source)
 
     struct = build_struct(spec, type_name)
+
+    if len(struct) > len(data_bits):
+        raise ValueError(
+            ("Data being parsed isn't long enough; expected at least %d "
+             "bits, but data is only %d bits long") %
+            (len(struct), len(data_bits)))
 
     struct._set_data(data_bits)
     struct._offset = 0

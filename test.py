@@ -3,7 +3,7 @@
 import struct, sys, pprint, unittest, itertools, tempfile, os, json
 
 from nose.tools import assert_equal, assert_not_equal, assert_true, \
-    assert_false, assert_raises
+    assert_false, assert_raises, raises
 
 import bread as b
 
@@ -25,6 +25,12 @@ test_struct = [
     ("third", b.uint64),
     ("fourth", b.int8)
 ]
+
+test_array_struct = [
+    {"endianness" : b.BIG_ENDIAN},
+    ("first", b.uint8),
+    ("flags", b.array(8, b.boolean)),
+    ("last", b.uint8)]
 
 nested_array_struct = [
     {"endianness" : b.BIG_ENDIAN},
@@ -142,12 +148,6 @@ def test_updates_do_not_leak():
 
 def test_array():
     data = bytearray([0b11111111, 0b10010101, 0b00010001])
-
-    test_array_struct = [
-        {"endianness" : b.BIG_ENDIAN},
-        ("first", b.uint8),
-        ("flags", b.array(8, b.boolean)),
-        ("last", b.uint8)]
 
     array_test = b.parse(data, test_array_struct)
 
@@ -294,7 +294,8 @@ def test_conditional():
         })
     ]
 
-    true_data = bytearray([0b11001010, 0b11101000])
+    true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
+    true_data.append('0b0')
 
     true_test = b.parse(true_data, conditional_test)
 
@@ -304,18 +305,23 @@ def test_conditional():
     assert_equal(true_test.frooz, 0b1001)
     assert_equal(true_test.quxz, 0b01011101)
 
-    assert_equal(b.write(true_test, conditional_test), true_data)
+    assert_equal(b.write(true_test, conditional_test),
+                 bytearray([0b11001010, 0b11101000, 0]))
 
-    false_data = bytearray([0b01001000, 0b10000000, 0b10000000])
+    false_data = bitstring.BitArray(
+        bytearray([0b01001000, 0b10000000]))
+    false_data.append('0b1')
 
     false_test = b.parse(false_data, conditional_test)
+
     assert_equal(false_test.qux, False)
     assert_true(hasattr(false_test, "fooz"))
     assert_false(hasattr(false_test, "frooz"))
     assert_equal(false_test.fooz, 0b10010001)
     assert_equal(false_test.barz, 1)
 
-    assert_equal(b.write(false_test, conditional_test), false_data)
+    assert_equal(b.write(false_test, conditional_test),
+                 bytearray([0b01001000, 0b10000000, 0b10000000]))
 
 def test_str():
     str_test = [("msg", b.string(5))]
@@ -360,6 +366,10 @@ def test_enum():
         assert_equal(result.suit, suit)
         assert_equal(b.write(result, enum_test), data)
 
+    spades_test = b.parse([2], enum_test)
+    spades_test.suit = "clubs"
+
+    assert_equal(bytearray([3]), b.write(spades_test))
 
     def get_data_field():
         data = bytearray([42])
@@ -524,3 +534,53 @@ def test_comparison():
     obj_2.flag_four = obj_1.flag_four
 
     assert_equal(obj_1, obj_2)
+
+@raises(AttributeError)
+def test_invalid_field_get_raises():
+    data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
+    test = b.parse(data, spec=test_struct)
+
+    test.missingfield
+
+@raises(ValueError)
+def test_too_small_struct_fails():
+    data = "X".encode('utf-8')
+    b.parse(data, spec=simple_struct)
+
+@raises(ValueError)
+def test_bad_type_fails():
+    data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
+    test = b.parse(data, spec=test_struct)
+    test.flag_four = 50
+
+def test_compare_struct_to_nonstruct_returns_false():
+    data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
+    test = b.parse(data, spec=test_struct)
+
+    assert_not_equal(test, 75)
+
+@raises(ValueError)
+def test_set_array_to_nonarray_fails():
+    data = bytearray([42, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0xdb])
+
+    nested_test = b.parse(data, nested_array_struct)
+
+    nested_test.matrix = 46
+
+def test_set_array_to_list():
+    data = bytearray([42, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0xdb])
+    nested_test = b.parse(data, nested_array_struct)
+
+    nested_test.matrix = [[2, 4, 6], [8, 10, 12], [14, 16, 18]]
+
+    output_bytes = b.write(nested_test)
+
+    assert_equal(output_bytes, bytearray(
+        [42, 2, 4, 6, 8, 10, 12, 14, 16, 18, 0xdb]))
+
+    nested_test.matrix[1] = [9, 8, 7]
+
+    output_bytes = b.write(nested_test)
+
+    assert_equal(output_bytes, bytearray(
+        [42, 2, 4, 6, 9, 8, 7, 14, 16, 18, 0xdb]))
