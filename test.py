@@ -448,27 +448,27 @@ def test_array_of_conditionals():
     test_struct = [
         ("cond", b.uint8),
         ("foos", b.array(3, (b.CONDITIONAL, "cond", {
-            1: [("foo", b.uint8)],
-            2: [("bar", b.uint8)],
-            4: [("baz", b.uint8)]
+            1: [("foo", b.nibble), b.padding(4)],
+            2: [("bar", b.bit), b.padding(7)],
+            4: [("baz", b.semi_nibble), b.padding(6)]
         })))
     ]
 
-    test_data = bytearray([1, 5, 6, 8])
+    test_data = bytearray([1, 0b10000101, 0b01010110, 0b11010101])
 
     test_parsed = b.parse(test_data, test_struct)
 
     assert_equal(test_parsed.cond, 1)
-    assert_equal(test_parsed.foos[0].foo, 5)
-    assert_equal(test_parsed.foos[1].foo, 6)
-    assert_equal(test_parsed.foos[2].foo, 8)
+    assert_equal(test_parsed.foos[0].foo, 0b1000)
+    assert_equal(test_parsed.foos[1].foo, 0b0101)
+    assert_equal(test_parsed.foos[2].foo, 0b1101)
 
     test_parsed.cond = 4
 
     assert_equal(test_parsed.cond, 4)
-    assert_equal(test_parsed.foos[0].baz, 5)
-    assert_equal(test_parsed.foos[1].baz, 6)
-    assert_equal(test_parsed.foos[2].baz, 8)
+    assert_equal(test_parsed.foos[0].baz, 0b10)
+    assert_equal(test_parsed.foos[1].baz, 0b01)
+    assert_equal(test_parsed.foos[2].baz, 0b11)
 
 @raises(ValueError)
 def test_set_non_leaf_value_fails():
