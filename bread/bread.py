@@ -36,17 +36,13 @@ class BreadField(object):
 
         self._name = None
 
-    @property
-    def length(self):
-        return self._length
-
     def _set_data(self, data_bits):
         self._data_bits = data_bits
 
     def get(self):
         if self._cached_value is None:
             start_bit = self._offset
-            end_bit = self._offset + self.length
+            end_bit = self._offset + self._length
 
             value_bits = self._data_bits[start_bit:end_bit]
             self._cached_value = self._decode_fn(value_bits)
@@ -62,7 +58,7 @@ class BreadField(object):
     def set(self, value):
         value_bits = self._encode_fn(value)
 
-        self._data_bits.overwrite(value_bits.bin, self._offset)
+        self._data_bits.overwrite(value_bits, self._offset)
 
         self._cached_value = value
 
@@ -104,8 +100,8 @@ class BreadConditional(object):
             self._conditions[self._get_condition()].__setattr__(attr, value)
 
     @property
-    def length(self):
-        return self._conditions[0].length
+    def _length(self):
+        return self._conditions.values()[0]._length
 
     def as_native(self):
         return self._conditions[self._get_condition()].as_native()
@@ -153,8 +149,8 @@ class BreadArray(object):
         return string_repr
 
     @property
-    def length(self):
-        return sum(map(lambda x: x.length, self._items))
+    def _length(self):
+        return sum(map(lambda x: x._length, self._items))
 
     def __getitem__(self, index):
         return self._items[index].get()
@@ -162,8 +158,26 @@ class BreadArray(object):
     def __setitem__(self, index, value):
         self._items[index].set(value)
 
+    def __len__(self):
+        return self._num_items
+
+    def __eq__(self, other):
+        if isinstance(other, list):
+            return map(lambda x: x.get(), self._items) == other
+
+        if not isinstance(other, BreadArray):
+            return False
+
+        if self._num_items != other._num_items:
+            return False
+
+        for i in range(self._num_items):
+            if self._items[i] != other._items[i]:
+                return False
+
+        return True
     def get(self):
-        return map(lambda x: x.get(), self._items)
+        return self
 
     def set(self, value):
         if type(value) != list:
@@ -199,7 +213,7 @@ class BreadArray(object):
 
         for item in self._items:
             item._offset = offset
-            offset += item.length
+            offset += item._length
 
 class BreadStruct(object):
     def __init__(self):
@@ -227,7 +241,7 @@ class BreadStruct(object):
         return self._LENGTH
 
     @property
-    def length(self):
+    def _length(self):
         return self._LENGTH
 
     def __str__(self):
@@ -262,7 +276,7 @@ class BreadStruct(object):
         # All fields offsets are relative to the starting offset for the struct
         for field in self._field_list:
             field._offset = offset
-            offset += field.length
+            offset += field._length
 
         for name, field in self._fields.items():
             setattr(self.__offsets__, name, field._offset)
@@ -270,7 +284,7 @@ class BreadStruct(object):
     # _LENGTH retained for backwards compatibility
     @property
     def _LENGTH(self):
-        return sum(map(lambda x: x.length, self._field_list))
+        return sum(map(lambda x: x._length, self._field_list))
 
     def get(self):
         return self
@@ -356,7 +370,7 @@ def intX(length, signed=False):
 
             def encode_intX(value):
                 options = {}
-                options[int_type_key] = value
+                options[int_type_key] = value - offset
                 options['length'] = length
 
                 return BitArray(**options)
@@ -364,7 +378,11 @@ def intX(length, signed=False):
             def decode_intX(encoded):
                 return getattr(encoded, int_type_key) + offset
         else:
+            offset = field_options.get('offset', 0)
+
             def encode_intX(value):
+                value -= offset
+
                 if signed:
                     return BitArray(int=value, length=length)
                 else:
@@ -372,9 +390,12 @@ def intX(length, signed=False):
 
             def decode_intX(encoded):
                 if signed:
-                    return encoded.int
+                    decoded = encoded.int
                 else:
-                    return encoded.uint
+                    decoded = encoded.uint
+
+                return decoded + offset
+
 
         return BreadField(
             length, encode_intX, decode_intX,
@@ -446,10 +467,22 @@ def enum(length, values, default=None):
         old_decode_fn = enum_field._decode_fn
 
         def encode_enum(value):
+            if value not in values:
+                raise ValueError('%d is not a valid enum value' % (value))
+
             return old_encode_fn(values[value])
 
         def decode_enum(encoded):
-            return values[old_decode_fn(encoded)]
+            decoded_value = old_decode_fn(encoded)
+
+            if decoded_value not in values:
+                if default is not None:
+                    return default
+                else:
+                    raise ValueError(
+                        '%d is not a valid enum value' % (decoded_value))
+
+            return values[decoded_value]
 
         enum_field._encode_fn = encode_enum
         enum_field._decode_fn = decode_enum
