@@ -56,6 +56,10 @@ class BreadField(object):
 
     def get(self):
         if self._cached_value is None:
+            if self._offset is None:
+                raise AttributeError(
+                    "Haven't initialized the struct with offsets yet")
+
             start_bit = self._offset
             end_bit = self._offset + self._length
 
