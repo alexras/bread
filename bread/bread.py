@@ -469,7 +469,7 @@ def enum(length, values, default=None):
         old_encode_fn = enum_field._encode_fn
         old_decode_fn = enum_field._decode_fn
 
-        keys = {v: k for k, v in values.items()}
+        keys = {v: k for k, v in list(values.items())}
 
         def encode_enum(key):
             if key not in keys:
