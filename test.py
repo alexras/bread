@@ -54,6 +54,15 @@ deeply_nested_struct = [
     ("dummy", simple_struct)
 ]
 
+conditional_test = [
+    ("qux", b.boolean),
+    (b.CONDITIONAL, "qux", {
+        False: [("fooz", b.byte), ("barz", b.byte)],
+        True: [("frooz", b.nibble), ("quxz", b.byte)]
+    })
+]
+
+
 def test_simple_struct():
     data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
     test = b.parse(data, spec = test_struct)
@@ -309,14 +318,6 @@ def test_endianness():
     assert_equal(b.write(test, endianness_test), data)
 
 def test_conditional():
-    conditional_test = [
-        ("qux", b.boolean),
-        (b.CONDITIONAL, "qux", {
-            False: [("fooz", b.byte), ("barz", b.byte)],
-            True: [("frooz", b.nibble), ("quxz", b.byte)]
-        })
-    ]
-
     true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
     true_data.append('0b0')
 
@@ -345,6 +346,37 @@ def test_conditional():
 
     assert_equal(b.write(false_test, conditional_test),
                  bytearray([0b01001000, 0b10000000, 0b10000000]))
+
+def test_conditional_set():
+    true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
+    true_data.append('0b0')
+
+    test_struct = b.parse(true_data, conditional_test)
+
+    assert_equal(test_struct.frooz, 0b1001)
+    assert_equal(test_struct.quxz, 0b01011101)
+    assert_true(test_struct.qux)
+
+    assert_false(hasattr(test_struct, "fooz"))
+    assert_false(hasattr(test_struct, "barz"))
+
+    test_struct.qux = False
+
+    assert_false(test_struct.qux)
+
+    assert_equal(test_struct.fooz, 0b10010101)
+    assert_equal(test_struct.barz, 0b11010000)
+
+    assert_false(hasattr(test_struct, "frooz"))
+    assert_false(hasattr(test_struct, "quxz"))
+
+    test_struct.barz = 0b11101010
+
+    written_bytes = b.write(test_struct)
+
+    expected_bytes = bytearray([0b01001010, 0b11110101, 0b0])
+
+    assert_equal(written_bytes, expected_bytes)
 
 def test_str():
     str_test = [("msg", b.string(5))]
@@ -632,6 +664,30 @@ def test_set_array_to_list():
     assert_equal(output_bytes, bytearray(
         [42, 2, 4, 6, 9, 8, 7, 14, 16, 18, 0xdb]))
 
+    def assign_wrong_length_array():
+        nested_test.matrix[1] = [9, 8, 7, 6]
+
+    assert_raises(ValueError, assign_wrong_length_array)
+
+def test_array_eq():
+    first_test_struct = [("nums", b.array(3, b.uint8))]
+    first_test_data = bytearray([2, 4, 6])
+
+    second_test_struct = [("nums", b.array(4, b.uint8))]
+    second_test_data = bytearray([2, 4, 6, 8])
+
+    first_test_parsed  = b.parse(first_test_data, first_test_struct)
+    second_test_parsed = b.parse(second_test_data, second_test_struct)
+
+    assert_equal(first_test_parsed, first_test_parsed)
+    assert_not_equal(first_test_parsed, second_test_parsed)
+
+    first_test_parsed_copy = b.parse(first_test_data, first_test_struct)
+    first_test_parsed_copy.nums[2] = 100
+
+    assert_not_equal(first_test_parsed, first_test_parsed_copy)
+
+
 def test_str():
     data = bytearray([42, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0xdb])
 
@@ -642,3 +698,34 @@ def test_str():
   matrix: [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
   last: 219
 }""")
+
+def test_nested_struct_str():
+    data = bitstring.BitArray(bytearray(range(34)))
+    data.append('0b0')
+
+    supernested_test = b.parse(data, deeply_nested_struct)
+
+    expected = '\n'.join([
+        '{',
+        '  ubermatrix: [',
+        '    {',
+        '      first: 0',
+        '      matrix: [[1, 2, 3], [4, 5, 6], [7, 8, 9]]',
+        '      last: 10', '    }, ',
+        '    {',
+        '      first: 11',
+        '      matrix: [[12, 13, 14], [15, 16, 17], [18, 19, 20]]',
+        '      last: 21',
+        '    }, ',
+        '    {',
+        '      first: 22',
+        '      matrix: [[23, 24, 25], [26, 27, 28], [29, 30, 31]]',
+        '      last: 32',
+        '    }]',
+        '    {',
+        '      length: 33',
+        '      ok: False',
+        '    }',
+        '}'])
+
+    assert_equal(str(supernested_test), expected)

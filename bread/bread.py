@@ -312,11 +312,17 @@ class BreadStruct(object):
         try:
             if attr[0] == '_':
                 super(BreadStruct, self).__setattr__(attr, value)
-            elif attr not in self._fields:
-                raise AttributeError("No known field '%s'" % (attr))
-            else:
+            elif attr in self._fields:
                 field = self._fields[attr]
                 field.set(value)
+            else:
+                for conditional_field in self._conditional_fields:
+                    try:
+                        return setattr(conditional_field, attr, value)
+                    except AttributeError:
+                        pass
+
+                raise AttributeError("No known field '%s'" % (attr))
         except CreationError as e:
             raise ValueError('Error while setting %s: %s' % (field._name, e))
 
