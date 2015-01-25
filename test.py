@@ -62,6 +62,12 @@ conditional_test = [
     })
 ]
 
+as_native_struct = [
+    {"endianness" : b.BIG_ENDIAN},
+    ("ubermatrix", b.array(3, nested_array_struct)),
+    ("dummy", simple_struct),
+    b.padding(7)
+]
 
 def test_simple_struct():
     data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
@@ -416,10 +422,10 @@ def test_conditional_bad_switch():
     test_parsed.foo = 12
 
 def test_as_native():
-    data = bitstring.BitArray(bytearray(range(34)))
-    data.append('0b0')
+    data = bitstring.BitArray(bytearray(range(35)))
 
-    supernested_test = b.parse(data, deeply_nested_struct)
+    supernested_test = b.parse(data, as_native_struct)
+
     assert_equal(supernested_test.as_native(), {
         'ubermatrix': [
             {
@@ -863,10 +869,9 @@ def test_str():
 }""")
 
 def test_nested_struct_str():
-    data = bitstring.BitArray(bytearray(range(34)))
-    data.append('0b0')
+    data = bitstring.BitArray(bytearray(range(35)))
 
-    supernested_test = b.parse(data, deeply_nested_struct)
+    supernested_test = b.parse(data, as_native_struct)
 
     expected = '\n'.join([
         '{',
@@ -912,3 +917,47 @@ def test_conditional_str():
 @raises(ValueError)
 def test_write_non_obj():
     b.write("piiiineapples!")
+
+def test_minimal_pylsdj_song():
+    pulse_instrument = [
+        ("envelope", b.byte),
+    ]
+
+    instrument = [
+        ("instrument_type", b.enum(8, {
+            0: 'pulse'
+        })),
+        (b.CONDITIONAL, "instrument_type", {
+            "pulse": pulse_instrument
+        })
+    ]
+
+    song = [
+        ("instruments", b.array(1, instrument))
+    ]
+
+    DEFAULT_INSTRUMENT = bytearray([0, 0xa8])
+
+    data_bytes = DEFAULT_INSTRUMENT
+
+    parsed_song = b.parse(data_bytes, song)
+
+    assert_equal(parsed_song.instruments[0].envelope, 0xa8)
+
+def test_read_and_write_prefix():
+    lsdsng_preamble = [
+        ("name", b.string(8)),
+        ("version", b.byte)
+    ]
+
+    data = 'hellomon'.encode('utf-8')
+
+    data += bytearray([10, 20, 30, 40, 50])
+
+    parsed = b.parse(data, lsdsng_preamble)
+
+    assert_equal(len(parsed), 9 * 8)
+
+    output_bytes = b.write(parsed)
+
+    assert_equal(len(output_bytes), 9)
