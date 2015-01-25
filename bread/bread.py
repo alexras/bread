@@ -31,7 +31,7 @@ def indent_text(string, indent_level=2):
 class BreadField(object):
     def __init__(self, length, encode_fn, decode_fn, str_format):
         self._data_bits = None
-        self._offset = None
+        self.__offset = None
         self._length = length
         self._cached_value = None
 
@@ -41,6 +41,15 @@ class BreadField(object):
         self._str_format = str_format
 
         self._name = None
+
+    @property
+    def _offset(self):
+        return self.__offset
+
+    @_offset.setter
+    def _offset(self, value):
+        self.__offset = value
+        self._cached_value = None
 
     def _set_data(self, data_bits):
         self._data_bits = data_bits
@@ -149,28 +158,35 @@ class BreadConditional(object):
 
 class BreadArray(object):
     def __init__(self, num_items, parent, item_spec):
-        self._items = []
         self._num_items = num_items
         self._name = None
+        self._offset = None
+        self._item_length = None
 
-        for i in range(num_items):
-            if type(item_spec) == list:
-                item = build_struct(item_spec)
-            elif type(item_spec) == tuple and item_spec[0] == CONDITIONAL:
-                item = BreadConditional.from_spec(item_spec, parent)
-            else:
-                item = item_spec(parent)
-            self._items.append(item)
+        if type(item_spec) == list:
+            self._accessor_item = build_struct(item_spec)
+        elif type(item_spec) == tuple and item_spec[0] == CONDITIONAL:
+            self._accessor_item = BreadConditional.from_spec(item_spec, parent)
+        else:
+            self._accessor_item = item_spec(parent)
+
+        self._item_length = self._accessor_item._length
 
     def __str__(self):
         string_repr = '['
 
         if self._num_items > 0:
-            if isinstance(self._items[0], BreadStruct):
+            if isinstance(self._accessor_item, BreadStruct):
                 str_function =  lambda x: '\n' + indent_text(str(x))
             else:
                 str_function = str
-            string_repr += ', '.join(map(str_function, self._items))
+
+            item_strings = []
+
+            for i in range(self._num_items):
+                item_strings.append(str_function(self[i]))
+
+            string_repr += ', '.join(item_strings)
 
         string_repr += ']'
 
@@ -178,20 +194,33 @@ class BreadArray(object):
 
     @property
     def _length(self):
-        return sum([x._length for x in self._items])
+        return self._item_length * self._num_items
 
     def __getitem__(self, index):
-        return self._items[index].get()
+        if index < 0 or index >= self._num_items:
+            raise IndexError('list index out of range')
+
+        self._set_accessor_item_offset(index)
+
+        return self._accessor_item.get()
 
     def __setitem__(self, index, value):
-        self._items[index].set(value)
+        if index < 0 or index >= self._num_items:
+            raise IndexError('list index out of range')
+
+        self._set_accessor_item_offset(index)
+
+        self._accessor_item.set(value)
+
+    def _set_accessor_item_offset(self, index):
+        self._accessor_item._offset = index * self._item_length + self._offset
 
     def __len__(self):
         return self._num_items
 
     def __eq__(self, other):
         if isinstance(other, list):
-            return [x.get() for x in self._items] == other
+            return [self[i] for i in range(self._num_items)] == other
 
         if not isinstance(other, BreadArray):
             return False
@@ -200,7 +229,7 @@ class BreadArray(object):
             return False
 
         for i in range(self._num_items):
-            if self._items[i] != other._items[i]:
+            if self[i] != other[i]:
                 return False
 
         return True
@@ -222,26 +251,20 @@ class BreadArray(object):
                 % (self._num_items, len(value)))
 
         for i, item in enumerate(value):
-            self._items[i].set(item)
+            self._set_accessor_item_offset(i)
+            self._accessor_item.set(item)
 
     def as_native(self):
-        return [item.as_native() for item in self._items]
+        native_items = []
+
+        for i in range(self._num_items):
+            self._set_accessor_item_offset(i)
+            native_items.append(self._accessor_item.as_native())
+
+        return native_items
 
     def _set_data(self, data_bits):
-        for item in self._items:
-            item._set_data(data_bits)
-
-    @property
-    def _offset(self):
-        return self._items[0]._offset
-
-    @_offset.setter
-    def _offset(self, value):
-        offset = value
-
-        for item in self._items:
-            item._offset = offset
-            offset += item._length
+        self._accessor_item._set_data(data_bits)
 
 class BreadStruct(object):
     def __init__(self):
