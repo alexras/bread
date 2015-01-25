@@ -82,16 +82,12 @@ class BreadField(object):
 
         self._cached_value = value
 
-    def copy(self):
-        return BreadField(self._length, self._encode_fn, self._decode_fn,
-                          self._str_format)
-
 class BreadConditional(object):
     @staticmethod
-    def from_spec(spec, parent_struct):
+    def from_spec(spec, parent):
         predicate_field_name, conditions = spec[1:]
 
-        field = BreadConditional(predicate_field_name, parent_struct)
+        field = BreadConditional(predicate_field_name, parent)
 
         for predicate_value, condition in list(conditions.items()):
             condition_struct = build_struct(condition)
@@ -143,7 +139,7 @@ class BreadConditional(object):
             self._conditions[self._get_condition()]._field_strings())
 
     @property
-    def _offset(self): #pragma: no cover
+    def _offset(self):
         return self._conditions[list(self._conditions.keys())[0]]._offset
 
     @_offset.setter
@@ -151,24 +147,20 @@ class BreadConditional(object):
         for condition_struct in list(self._conditions.values()):
             condition_struct._offset = off
 
-    def copy(self):
-        copy = BreadConditional(
-            self._conditional_field_name, self._parent_struct)
-
-        for condition, struct in list(self._conditions.items()):
-            copy._add_condition(condition, struct.copy())
-
-        return copy
-
 class BreadArray(object):
-    def __init__(self, num_items, item_template):
+    def __init__(self, num_items, parent, item_spec):
         self._items = []
         self._num_items = num_items
         self._name = None
 
-        if item_template is not None:
-            for i in range(num_items):
-                self._items.append(item_template.copy())
+        for i in range(num_items):
+            if type(item_spec) == list:
+                item = build_struct(item_spec)
+            elif type(item_spec) == tuple and item_spec[0] == CONDITIONAL:
+                item = BreadConditional.from_spec(item_spec, parent)
+            else:
+                item = item_spec(parent)
+            self._items.append(item)
 
     def __str__(self):
         string_repr = '['
@@ -232,10 +224,6 @@ class BreadArray(object):
         for i, item in enumerate(value):
             self._items[i].set(item)
 
-    def copy(self):
-        array_copy = BreadArray(self._num_items, self._items[0])
-        return array_copy
-
     def as_native(self):
         return [item.as_native() for item in self._items]
 
@@ -294,7 +282,8 @@ class BreadStruct(object):
             elif isinstance(field, BreadConditional):
                 field_strings.append(str(field))
             else:
-                field_strings.append(field._name + ': ' + str(field))
+                if field._name[0] != '_':
+                    field_strings.append(field._name + ': ' + str(field))
 
         return field_strings
 
@@ -376,15 +365,6 @@ class BreadStruct(object):
         if isinstance(field, BreadConditional):
             self._conditional_fields.append(field)
 
-    def copy(self):
-        copy = BreadStruct()
-        copy._name = self._name
-
-        for field in self._field_list:
-            copy._add_field(field.copy(), field._name)
-
-        return copy
-
     def as_native(self):
         native_struct = {}
 
@@ -405,7 +385,7 @@ class BreadStruct(object):
 # BEGIN TYPE INFORMATION
 
 def intX(length, signed=False):
-    def make_intX_field(**field_options):
+    def make_intX_field(parent, **field_options):
         if length % 8 == 0 and length >= 8:
             int_type_key = None
 
@@ -470,7 +450,7 @@ semi_nibble = intX(2, signed=False)
 nibble = intX(4, signed=False)
 
 def string(length):
-    def make_string_field(**field_options):
+    def make_string_field(parent, **field_options):
         length_in_bits = length * 8
 
         def encode_string(value):
@@ -493,13 +473,13 @@ def encode_bool(value):
 def decode_bool(encoded):
     return encoded.bool
 
-def boolean(**field_options):
+def boolean(parent, **field_options):
     return BreadField(
         1, encode_bool, decode_bool,
         str_format=field_options.get('str_format', None))
 
 def padding(length): # pragma: no cover
-    def make_padding_field(**field_options):
+    def make_padding_field(parent, **field_options):
         def encode_pad(value):
             return pack('pad:n', n=value)
 
@@ -513,8 +493,8 @@ def padding(length): # pragma: no cover
     return make_padding_field
 
 def enum(length, values, default=None):
-    def make_enum_field(**field_options):
-        enum_field = intX(length, signed=False)(**field_options)
+    def make_enum_field(parent, **field_options):
+        enum_field = intX(length, signed=False)(parent, **field_options)
 
         old_encode_fn = enum_field._encode_fn
         old_decode_fn = enum_field._decode_fn
@@ -547,16 +527,8 @@ def enum(length, values, default=None):
     return make_enum_field
 
 def array(length, substruct):
-    def make_array_field(**field_options):
-        if type(substruct) == list:
-            built_substruct = build_struct(spec=substruct)
-        elif type(substruct) == tuple and substruct[0] == CONDITIONAL:
-            built_substruct = BreadConditional.from_spec(
-                substruct, field_options['_parent'])
-        else:
-            built_substruct = substruct()
-
-        return BreadArray(length, built_substruct)
+    def make_array_field(parent, **field_options):
+        return BreadArray(length, parent, substruct)
 
     return make_array_field
 
@@ -568,13 +540,11 @@ def build_struct(spec, type_name=None):
         pass
 
     if type_name is not None:
-        NewStruct.__name__ = type_name
+        NewBreadStruct.__name__ = type_name
 
     struct = NewBreadStruct()
 
-    global_options = {
-        '_parent': struct
-    }
+    global_options = {}
 
     unnamed_fields = 0
 
@@ -594,7 +564,8 @@ def build_struct(spec, type_name=None):
 
             # Don't give the field a name
             struct._add_field(
-                field(**global_options), '_unnamed_%d' % (unnamed_fields))
+                field(struct, **global_options), '_unnamed_%d' %
+                (unnamed_fields))
             unnamed_fields += 1
 
         elif spec_line[0] == CONDITIONAL:
@@ -619,7 +590,7 @@ def build_struct(spec, type_name=None):
             if type(field) == list:
                 struct._add_field(build_struct(field), field_name)
             else:
-                struct._add_field(field(**options), field_name)
+                struct._add_field(field(struct, **options), field_name)
 
     return struct
 
@@ -640,7 +611,7 @@ def parse(data_source, spec, type_name='bread_struct'):
              "bits, but data is only %d bits long") %
             (len(struct), len(data_bits)))
 
-    struct._set_data(data_bits)
+    struct._set_data(data_bits[:len(struct)])
     struct._offset = 0
 
     return struct
