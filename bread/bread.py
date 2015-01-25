@@ -159,24 +159,58 @@ class BreadConditional(object):
 class BreadArray(object):
     def __init__(self, num_items, parent, item_spec):
         self._num_items = num_items
+        self.__offset = None
         self._name = None
-        self._offset = None
         self._item_length = None
+        self._accessor_items = [None] * self._num_items
+        self._item_spec = item_spec
+        self._parent = parent
+        self._data_bits = None
 
-        if type(item_spec) == list:
-            self._accessor_item = build_struct(item_spec)
-        elif type(item_spec) == tuple and item_spec[0] == CONDITIONAL:
-            self._accessor_item = BreadConditional.from_spec(item_spec, parent)
+        self._item_length = self._get_accessor_item(0)._length
+
+    @property
+    def _offset(self):
+        return self.__offset
+
+    @_offset.setter
+    def _offset(self, offset):
+        self.__offset = offset
+
+        cached_accessors = (i for i in self._accessor_items if i is not None)
+
+        for item in cached_accessors:
+            item._offset = offset
+
+
+    def _create_accessor_item(self, index):
+        if type(self._item_spec) == list:
+            item = build_struct(self._item_spec)
+        elif (type(self._item_spec) == tuple and
+              self._item_spec[0] == CONDITIONAL):
+            item = BreadConditional.from_spec(self._item_spec, self._parent)
         else:
-            self._accessor_item = item_spec(parent)
+            item = self._item_spec(self._parent)
 
-        self._item_length = self._accessor_item._length
+        if self._offset is not None:
+            item._offset = index * self._item_length + self._offset
+
+        if self._data_bits is not None:
+            item._set_data(self._data_bits)
+
+        return item
+
+    def _get_accessor_item(self, index):
+        if self._accessor_items[index] is None:
+            self._accessor_items[index] = self._create_accessor_item(index)
+
+        return self._accessor_items[index]
 
     def __str__(self):
         string_repr = '['
 
         if self._num_items > 0:
-            if isinstance(self._accessor_item, BreadStruct):
+            if type(self._item_spec) == list:
                 str_function =  lambda x: '\n' + indent_text(str(x))
             else:
                 str_function = str
@@ -200,20 +234,13 @@ class BreadArray(object):
         if index < 0 or index >= self._num_items:
             raise IndexError('list index out of range')
 
-        self._set_accessor_item_offset(index)
-
-        return self._accessor_item.get()
+        return self._get_accessor_item(index).get()
 
     def __setitem__(self, index, value):
         if index < 0 or index >= self._num_items:
             raise IndexError('list index out of range')
 
-        self._set_accessor_item_offset(index)
-
-        self._accessor_item.set(value)
-
-    def _set_accessor_item_offset(self, index):
-        self._accessor_item._offset = index * self._item_length + self._offset
+        self._get_accessor_item(index).set(value)
 
     def __len__(self):
         return self._num_items
@@ -251,20 +278,23 @@ class BreadArray(object):
                 % (self._num_items, len(value)))
 
         for i, item in enumerate(value):
-            self._set_accessor_item_offset(i)
-            self._accessor_item.set(item)
+            self._get_accessor_item(i).set(item)
 
     def as_native(self):
         native_items = []
 
         for i in range(self._num_items):
-            self._set_accessor_item_offset(i)
-            native_items.append(self._accessor_item.as_native())
+            native_items.append(self._get_accessor_item(i).as_native())
 
         return native_items
 
     def _set_data(self, data_bits):
-        self._accessor_item._set_data(data_bits)
+        self._data_bits = data_bits
+
+        cached_accessors = (i for i in self._accessor_items if i is not None)
+
+        for item in cached_accessors:
+            item._set_data(data_bits)
 
 class BreadStruct(object):
     def __init__(self):
