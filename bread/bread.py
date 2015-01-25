@@ -58,7 +58,8 @@ class BreadField(object):
         if self._cached_value is None:
             if self._offset is None:
                 raise AttributeError(
-                    "Haven't initialized the struct with offsets yet")
+                    "Haven't initialized the field '%s' with offsets yet" %
+                    (self._name))
 
             start_bit = self._offset
             end_bit = self._offset + self._length
@@ -563,13 +564,13 @@ def array(length, substruct):
 
 def build_struct(spec, type_name=None):
     # Give different structs the appearance of having different type names
-    class NewStruct(BreadStruct):
+    class NewBreadStruct(BreadStruct):
         pass
 
     if type_name is not None:
         NewStruct.__name__ = type_name
 
-    struct = NewStruct()
+    struct = NewBreadStruct()
 
     global_options = {
         '_parent': struct
@@ -577,8 +578,6 @@ def build_struct(spec, type_name=None):
 
     unnamed_fields = 0
 
-    # Read specification one line at a time, greedily consuming bits from the
-    # stream as you go
     for spec_line in spec:
         if type(spec_line) == dict:
             # A dictionary in the spec indicates global options for parsing
