@@ -1,4 +1,7 @@
-import types, collections, functools, json
+import types
+import collections
+import functools
+import json
 from bitstring import BitArray, pack, CreationError
 
 from .vendor import six
@@ -231,10 +234,16 @@ class BreadArray(object):
         return self._item_length * self._num_items
 
     def __getitem__(self, index):
-        if index < 0 or index >= self._num_items:
-            raise IndexError('list index out of range')
+        if type(index) is slice:
+            start, stop, step = index.indices(self._num_items)
 
-        return self._get_accessor_item(index).get()
+            return [self._get_accessor_item(i).get()
+                    for i in range(start, stop, step)]
+        else:
+            if index < 0 or index >= self._num_items:
+                raise IndexError('list index out of range')
+
+            return self._get_accessor_item(index).get()
 
     def __setitem__(self, index, value):
         if index < 0 or index >= self._num_items:

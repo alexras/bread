@@ -961,3 +961,19 @@ def test_read_and_write_prefix():
     output_bytes = b.write(parsed)
 
     assert_equal(len(output_bytes), 9)
+
+def test_get_slice():
+    data = bytearray(['a', 'b', 'c', 'd', 'e', 'f'])
+
+    slice_test_format = [('arr', b.array(6, b.string(1)))]
+
+    slice_test = b.parse(data, slice_test_format)
+
+    assert_equal(['a', 'b', 'c', 'd', 'e', 'f'], slice_test.arr)
+
+    assert_equal(['c', 'd', 'e', 'f'], slice_test.arr[2:])
+    assert_equal(['a', 'b'], slice_test.arr[:2])
+    assert_equal(['f', 'e', 'd', 'c', 'b', 'a'], slice_test.arr[::-1])
+    assert_equal(['c', 'd', 'e'], slice_test.arr[2:5])
+    assert_equal(['f', 'e', 'd'], slice_test.arr[5:2:-1])
+    assert_equal(['f', 'e', 'd'], slice_test.arr[:2:-1])
