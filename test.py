@@ -963,17 +963,17 @@ def test_read_and_write_prefix():
     assert_equal(len(output_bytes), 9)
 
 def test_get_slice():
-    data = bytearray(['a', 'b', 'c', 'd', 'e', 'f'])
+    data = bytearray([0x61, 0x62, 0x63, 0x64, 0x65, 0x66])
 
     slice_test_format = [('arr', b.array(6, b.string(1)))]
 
     slice_test = b.parse(data, slice_test_format)
 
-    assert_equal(['a', 'b', 'c', 'd', 'e', 'f'], slice_test.arr)
+    assert_equal([b'a', b'b', b'c', b'd', b'e', b'f'], list(slice_test.arr))
 
-    assert_equal(['c', 'd', 'e', 'f'], slice_test.arr[2:])
-    assert_equal(['a', 'b'], slice_test.arr[:2])
-    assert_equal(['f', 'e', 'd', 'c', 'b', 'a'], slice_test.arr[::-1])
-    assert_equal(['c', 'd', 'e'], slice_test.arr[2:5])
-    assert_equal(['f', 'e', 'd'], slice_test.arr[5:2:-1])
-    assert_equal(['f', 'e', 'd'], slice_test.arr[:2:-1])
+    assert_equal([b'c', b'd', b'e', b'f'], slice_test.arr[2:])
+    assert_equal([b'a', b'b'], slice_test.arr[:2])
+    assert_equal([b'f', b'e', b'd', b'c', b'b', b'a'], slice_test.arr[::-1])
+    assert_equal([b'c', b'd', b'e'], slice_test.arr[2:5])
+    assert_equal([b'f', b'e', b'd'], slice_test.arr[5:2:-1])
+    assert_equal([b'f', b'e', b'd'], slice_test.arr[:2:-1])
