@@ -476,6 +476,28 @@ def test_array_of_conditionals():
     assert_equal(test_parsed.foos[1].baz, 0b01)
     assert_equal(test_parsed.foos[2].baz, 0b11)
 
+def test_field_properties_in_array():
+    array_endian_test = [
+        ("little_arr", b.array(3, b.uint16), { "endianness": b.LITTLE_ENDIAN }),
+        ("big_arr", b.array(3, b.uint16), { "endianness": b.BIG_ENDIAN })
+    ]
+
+    data = bytearray([0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+                      0x01, 0x02, 0x03, 0x04, 0x05, 0x06])
+
+    test = b.parse(data, array_endian_test)
+
+    assert_equal(len(test.little_arr), 3)
+    assert_equal(test.little_arr[0], 0x0201)
+    assert_equal(test.little_arr[1], 0x0403)
+    assert_equal(test.little_arr[2], 0x0605)
+
+    assert_equal(len(test.big_arr), 3)
+    assert_equal(test.big_arr[0], 0x0102)
+    assert_equal(test.big_arr[1], 0x0304)
+    assert_equal(test.big_arr[2], 0x0506)
+
+
 @raises(ValueError)
 def test_set_non_leaf_value_fails():
     struct_in_a_struct = [

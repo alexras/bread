@@ -160,7 +160,7 @@ class BreadConditional(object):
             condition_struct._offset = off
 
 class BreadArray(object):
-    def __init__(self, num_items, parent, item_spec):
+    def __init__(self, num_items, parent, item_spec, field_options):
         self._num_items = num_items
         self.__offset = None
         self._name = None
@@ -169,6 +169,7 @@ class BreadArray(object):
         self._item_spec = item_spec
         self._parent = parent
         self._data_bits = None
+        self._field_options = field_options
 
         self._item_length = self._get_accessor_item(0)._length
 
@@ -193,7 +194,7 @@ class BreadArray(object):
               self._item_spec[0] == CONDITIONAL):
             item = BreadConditional.from_spec(self._item_spec, self._parent)
         else:
-            item = self._item_spec(self._parent)
+            item = self._item_spec(self._parent, **(self._field_options))
 
         if self._offset is not None:
             item._offset = index * self._item_length + self._offset
@@ -590,7 +591,7 @@ def enum(length, values, default=None):
 
 def array(length, substruct):
     def make_array_field(parent, **field_options):
-        return BreadArray(length, parent, substruct)
+        return BreadArray(length, parent, substruct, field_options)
 
     return make_array_field
 
