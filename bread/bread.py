@@ -2,6 +2,8 @@ import types
 import collections
 import functools
 import json
+import math
+
 from bitstring import BitArray, pack, CreationError
 
 from .vendor import six
@@ -658,6 +660,23 @@ def build_struct(spec, type_name=None):
     return struct
 
 
+def new(spec, type_name='bread_struct', data=None):
+    struct = build_struct(spec, type_name)
+
+    if data is None:
+        data = BitArray(bytearray(int(math.ceil(len(struct) / 8.0))))
+
+    if len(struct) > len(data):
+        raise ValueError(
+            ("Data being parsed isn't long enough; expected at least %d "
+             "bits, but data is only %d bits long") %
+            (len(struct), len(data)))
+
+    struct._set_data(data[:len(struct)])
+    struct._offset = 0
+
+    return struct
+
 def parse(data_source, spec, type_name='bread_struct'):
     if type(data_source) == str:
         data_bits = BitArray(bytes=six.b(data_source))
@@ -666,18 +685,7 @@ def parse(data_source, spec, type_name='bread_struct'):
     else:
         data_bits = BitArray(data_source)
 
-    struct = build_struct(spec, type_name)
-
-    if len(struct) > len(data_bits):
-        raise ValueError(
-            ("Data being parsed isn't long enough; expected at least %d "
-             "bits, but data is only %d bits long") %
-            (len(struct), len(data_bits)))
-
-    struct._set_data(data_bits[:len(struct)])
-    struct._offset = 0
-
-    return struct
+    return new(spec, type_name=type_name, data=data_bits)
 
 def write(parsed_obj, spec=None, filename=None):
     """Writes an object created by `parse` to either a file or a bytearray.

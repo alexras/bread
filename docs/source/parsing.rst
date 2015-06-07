@@ -36,3 +36,21 @@ a JSON string.
 Objects produced by bread can also produce representations of themselves as
 Pythonic ``list`` s, ``dict`` s, etc.  Calling the object's ``as_native()``
 method will produce its data in this form.
+
+Creating Empty Objects
+----------------------
+
+Sometimes, you want to write a binary format without having to read anything
+first. To do this in Bread, you can use the function ``new(spec)``.
+
+Here's an example of ``new()`` in action: ::
+
+    format_spec = [("greeting", b.string(5)),
+                   ("age", b.nibble)]
+
+    empty_struct = b.new(format_spec)
+
+    empty_struct.greeting = 'hello'
+    empty_struct.age = 0xb
+
+    output_bytes = b.write(empty_struct)

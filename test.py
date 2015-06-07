@@ -999,3 +999,20 @@ def test_get_slice():
     assert_equal([b'c', b'd', b'e'], slice_test.arr[2:5])
     assert_equal([b'f', b'e', b'd'], slice_test.arr[5:2:-1])
     assert_equal([b'f', b'e', b'd'], slice_test.arr[:2:-1])
+
+def test_new():
+    format_spec = [("greeting", b.string(5)),
+                   ("age", b.nibble)]
+
+    empty_struct = b.new(format_spec)
+
+    assert_equal(len(empty_struct), 8 * 5 + 4)
+
+    assert_equal(empty_struct.greeting, b'\x00\x00\x00\x00\x00')
+    assert_equal(empty_struct.age, 0)
+
+    empty_struct.greeting = 'hello'
+    empty_struct.age = 0xb
+
+    output_bytes = b.write(empty_struct)
+    assert_equal(output_bytes, bytearray([0x68, 0x65, 0x6c, 0x6c, 0x6f, 0xb0]))
