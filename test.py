@@ -12,7 +12,9 @@ import bitstring
 # Shared structs for bread struct test
 
 test_struct = [
-    { "endianness" : b.BIG_ENDIAN },
+    {
+        "endianness": b.BIG_ENDIAN
+    },
     ("flag_one", b.boolean),
     ("flag_two", b.boolean),
     ("flag_three", b.boolean),
@@ -27,13 +29,17 @@ test_struct = [
 ]
 
 test_array_struct = [
-    {"endianness" : b.BIG_ENDIAN},
+    {
+        "endianness": b.BIG_ENDIAN
+    },
     ("first", b.uint8),
     ("flags", b.array(8, b.boolean)),
     ("last", b.uint8)]
 
 nested_array_struct = [
-    {"endianness" : b.BIG_ENDIAN},
+    {
+        "endianness": b.BIG_ENDIAN
+    },
     ("first", b.uint8),
     ("matrix", b.array(3, b.array(3, b.uint8))),
     ("last", b.uint8)
@@ -49,7 +55,9 @@ offset_struct = [
 ]
 
 deeply_nested_struct = [
-    {"endianness" : b.BIG_ENDIAN},
+    {
+        "endianness": b.BIG_ENDIAN
+    },
     ("ubermatrix", b.array(3, nested_array_struct)),
     ("dummy", simple_struct)
 ]
@@ -63,15 +71,18 @@ conditional_test = [
 ]
 
 as_native_struct = [
-    {"endianness" : b.BIG_ENDIAN},
+    {
+        "endianness": b.BIG_ENDIAN
+    },
     ("ubermatrix", b.array(3, nested_array_struct)),
     ("dummy", simple_struct),
     b.padding(7)
 ]
 
+
 def test_simple_struct():
     data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
-    test = b.parse(data, spec = test_struct)
+    test = b.parse(data, spec=test_struct)
 
     assert_equal(test.__offsets__.flag_one, 0)
     assert_equal(test.__offsets__.flag_two, 1)
@@ -101,18 +112,19 @@ def test_simple_struct():
     assert_equal(output_data, data)
 
     expected_json_struct = {
-        "flag_one" : True,
-        "flag_two" : False,
-        "flag_three" : True,
-        "flag_four" : False,
-        "first" : 0xfb,
-        "blah" : 0xdddd,
-        "second" : -57,
-        "third" : 90,
-        "fourth" : 0
+        "flag_one": True,
+        "flag_two": False,
+        "flag_three": True,
+        "flag_four": False,
+        "first": 0xfb,
+        "blah": 0xdddd,
+        "second": -57,
+        "third": 90,
+        "fourth": 0
     }
 
     assert_equal(json.loads(test.as_json()), expected_json_struct)
+
 
 def test_write_intX():
     ints_struct = [
@@ -201,6 +213,7 @@ def test_array():
 
     assert_equal(b.write(array_test, test_array_struct), data)
 
+
 def test_nested_array():
     data = bytearray([42, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0xdb])
 
@@ -221,12 +234,13 @@ def test_nested_array():
     assert_equal(b.write(nested_test, nested_array_struct), data)
 
     expected_json_struct = {
-        "first" : 42,
-        "matrix" : [[0, 1, 2], [3, 4, 5], [6, 7, 8]],
-        "last" : 0xdb
+        "first": 42,
+        "matrix": [[0, 1, 2], [3, 4, 5], [6, 7, 8]],
+        "last": 0xdb
     }
 
     assert_equal(json.loads(nested_test.as_json()), expected_json_struct)
+
 
 def test_nested_struct():
     data = bitstring.BitArray(bytearray(range(34)))
@@ -263,25 +277,25 @@ def test_nested_struct():
                  bytearray(list(range(34)) + [0b0]))
 
     expected_json_struct = {
-        "dummy" : {
-            "length" : 33,
-            "ok" : False
+        "dummy": {
+            "length": 33,
+            "ok": False
         },
-        "ubermatrix" : [
+        "ubermatrix": [
             {
-                "first" : 0,
+                "first": 0,
                 "matrix": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
-                "last" : 10
+                "last": 10
             },
             {
-                "first" : 11,
+                "first": 11,
                 "matrix": [[12, 13, 14], [15, 16, 17], [18, 19, 20]],
-                "last" : 21
+                "last": 21
             },
             {
-                "first" : 22,
+                "first": 22,
                 "matrix": [[23, 24, 25], [26, 27, 28], [29, 30, 31]],
-                "last" : 32
+                "last": 32
             }
         ]
     }
@@ -307,10 +321,11 @@ def test_single_byte_fields():
 
     assert_equal(b.write(test, single_byte_fields_struct), data)
 
+
 def test_endianness():
     endianness_test = [
-        ("big_endian", b.uint32, {"endianness" : b.BIG_ENDIAN}),
-        ("little_endian", b.uint32, {"endianness" : b.LITTLE_ENDIAN}),
+        ("big_endian", b.uint32, {"endianness": b.BIG_ENDIAN}),
+        ("little_endian", b.uint32, {"endianness": b.LITTLE_ENDIAN}),
         ("default_endian", b.uint32)]
 
     data = bytearray([0x01, 0x02, 0x03, 0x04] * 3)
@@ -322,6 +337,7 @@ def test_endianness():
     assert_equal(hex(test.default_endian), hex(test.little_endian))
 
     assert_equal(b.write(test, endianness_test), data)
+
 
 def test_conditional():
     true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
@@ -352,6 +368,7 @@ def test_conditional():
 
     assert_equal(b.write(false_test, conditional_test),
                  bytearray([0b01001000, 0b10000000, 0b10000000]))
+
 
 def test_conditional_as_native():
     true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
@@ -405,6 +422,7 @@ def test_conditional_set():
 
     assert_equal(written_bytes, expected_bytes)
 
+
 @raises(b.BadConditionalCaseError)
 def test_conditional_bad_switch():
     test_struct = [
@@ -421,6 +439,7 @@ def test_conditional_bad_switch():
 
     test_parsed.foo = 12
 
+
 def test_as_native():
     data = bitstring.BitArray(bytearray(range(35)))
 
@@ -430,7 +449,7 @@ def test_as_native():
         'ubermatrix': [
             {
                 'first': 0,
-                'matrix': [[1,2,3], [4,5,6], [7,8,9]],
+                'matrix': [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
                 'last': 10
             },
             {
@@ -449,6 +468,7 @@ def test_as_native():
             'ok': False
         }
     })
+
 
 def test_array_of_conditionals():
     test_struct = [
@@ -476,10 +496,11 @@ def test_array_of_conditionals():
     assert_equal(test_parsed.foos[1].baz, 0b01)
     assert_equal(test_parsed.foos[2].baz, 0b11)
 
+
 def test_field_properties_in_array():
     array_endian_test = [
-        ("little_arr", b.array(3, b.uint16), { "endianness": b.LITTLE_ENDIAN }),
-        ("big_arr", b.array(3, b.uint16), { "endianness": b.BIG_ENDIAN })
+        ("little_arr", b.array(3, b.uint16), {"endianness": b.LITTLE_ENDIAN}),
+        ("big_arr", b.array(3, b.uint16), {"endianness": b.BIG_ENDIAN})
     ]
 
     data = bytearray([0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
@@ -508,11 +529,12 @@ def test_set_non_leaf_value_fails():
         ])
     ]
 
-    data = bitstring.BitArray(bytearray([1,2,3]))
+    data = bitstring.BitArray(bytearray([1, 2, 3]))
 
     nested_set_test = b.parse(data, struct_in_a_struct)
 
     nested_set_test.simple = 5
+
 
 def test_multiple_conditionals():
     test_struct = [
@@ -555,6 +577,7 @@ def test_set_sub_byte_intX():
 
     assert_equal(bytearray([0xa2]), b.write(test_parsed))
 
+
 def test_parse_str():
     test_struct = [
         ("str", b.string(13))
@@ -566,6 +589,7 @@ def test_parse_str():
 
     assert_equal(test_parsed.str.decode('utf-8'), "gabbagabbahey")
 
+
 def test_str():
     str_test = [("msg", b.string(5))]
 
@@ -574,6 +598,7 @@ def test_str():
     assert_equal(result.msg.decode('utf-8'), "hello")
 
     assert_equal(b.write(result, str_test), data)
+
 
 def test_str_unicode():
     str_test = [("msg", b.string(5))]
@@ -591,6 +616,8 @@ def test_str_unicode():
     edited_result = b.parse(output_data, str_test)
 
     assert_equal(result.msg, "abate")
+    assert_not_equal(edited_result, result)
+
 
 def test_enum():
     enum_test = [
@@ -621,6 +648,7 @@ def test_enum():
 
     assert_raises(ValueError, get_data_field)
 
+
 def test_enum_default():
     enum_test = [
         ("suit", b.enum(8, {
@@ -640,6 +668,7 @@ def test_enum_default():
 
     assert_equal(result.suit, "spades")
 
+
 @raises(ValueError)
 def test_enum_set_invalid_value():
     enum_test = [
@@ -656,6 +685,7 @@ def test_enum_set_invalid_value():
     assert_equal("hearts", parsed.suit)
 
     parsed.suit = "skulls"
+
 
 def test_conditional_on_non_integer_enum():
     enum_test = [
@@ -708,6 +738,7 @@ def test_conditional_on_non_integer_enum():
 
     assert_equal(b.write(noise, enum_test), noise_test)
 
+
 def test_non_powers_of_eight_intX():
     intX_test = [
         ("unsigned_10b", b.intX(10, False)),
@@ -728,6 +759,7 @@ def test_non_powers_of_eight_intX():
 
     assert_equal(b.write(result, intX_test), in_bytes)
 
+
 def test_read_modify_write():
     data = bitstring.BitArray(bytearray(range(34)))
     data.append('0b0')
@@ -745,6 +777,7 @@ def test_read_modify_write():
 
     assert_equal(re_read_data.ubermatrix[1].matrix[2][1], 42)
 
+
 def test_read_modify_write_with_offset():
     data = bytearray([4])
 
@@ -760,6 +793,7 @@ def test_read_modify_write_with_offset():
 
     assert_equal(output[0], 9)
 
+
 def test_file_io():
     data = bytearray(list(range(36)))
 
@@ -773,17 +807,18 @@ def test_file_io():
         with open(file_path, 'rb') as fp:
             supernested_test_from_file = b.parse(fp, deeply_nested_struct)
 
-        for i,j,k in itertools.product(range(3), range(3), range(3)):
+        for i, j, k in itertools.product(range(3), range(3), range(3)):
             assert_equal(supernested_test_from_file.ubermatrix[i].matrix[j][k],
                          supernested_test.ubermatrix[i].matrix[j][k])
     finally:
         os.close(handle)
         os.unlink(file_path)
 
+
 def test_comparison():
     data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
-    obj_1 = b.parse(data, spec = test_struct)
-    obj_2 = b.parse(data, spec = test_struct)
+    obj_1 = b.parse(data, spec=test_struct)
+    obj_2 = b.parse(data, spec=test_struct)
 
     assert_equal(obj_1, obj_2)
 
@@ -795,12 +830,14 @@ def test_comparison():
 
     assert_equal(obj_1, obj_2)
 
+
 @raises(AttributeError)
 def test_invalid_field_get_raises():
     data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
     test = b.parse(data, spec=test_struct)
 
     test.missingfield
+
 
 @raises(AttributeError)
 def test_invalid_field_set_raises():
@@ -809,10 +846,12 @@ def test_invalid_field_set_raises():
 
     test.missingfield = 12
 
+
 @raises(ValueError)
 def test_too_small_struct_fails():
     data = "X".encode('utf-8')
     b.parse(data, spec=simple_struct)
+
 
 @raises(ValueError)
 def test_bad_type_fails():
@@ -820,11 +859,13 @@ def test_bad_type_fails():
     test = b.parse(data, spec=test_struct)
     test.flag_four = 50
 
+
 def test_compare_struct_to_nonstruct_returns_false():
     data = struct.pack(">IqQb", 0xafb0dddd, -57, 90, 0)
     test = b.parse(data, spec=test_struct)
 
     assert_not_equal(test, 75)
+
 
 @raises(ValueError)
 def test_set_array_to_nonarray_fails():
@@ -833,6 +874,7 @@ def test_set_array_to_nonarray_fails():
     nested_test = b.parse(data, nested_array_struct)
 
     nested_test.matrix = 46
+
 
 def test_set_array_to_list():
     data = bytearray([42, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0xdb])
@@ -857,6 +899,7 @@ def test_set_array_to_list():
 
     assert_raises(ValueError, assign_wrong_length_array)
 
+
 def test_array_eq():
     first_test_struct = [("nums", b.array(3, b.uint8))]
     first_test_data = bytearray([2, 4, 6])
@@ -864,7 +907,7 @@ def test_array_eq():
     second_test_struct = [("nums", b.array(4, b.uint8))]
     second_test_data = bytearray([2, 4, 6, 8])
 
-    first_test_parsed  = b.parse(first_test_data, first_test_struct)
+    first_test_parsed = b.parse(first_test_data, first_test_struct)
     second_test_parsed = b.parse(second_test_data, second_test_struct)
 
     assert_equal(first_test_parsed, first_test_parsed)
@@ -879,7 +922,7 @@ def test_array_eq():
     assert_not_equal(first_test_parsed.nums, first_test_parsed_copy.nums)
 
 
-def test_str():
+def test_printable_str():
     data = bytearray([42, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0xdb])
 
     nested_test = b.parse(data, nested_array_struct)
@@ -889,6 +932,7 @@ def test_str():
   matrix: [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
   last: 219
 }""")
+
 
 def test_nested_struct_str():
     data = bitstring.BitArray(bytearray(range(35)))
@@ -920,6 +964,7 @@ def test_nested_struct_str():
 
     assert_equal(str(supernested_test), expected)
 
+
 def test_conditional_str():
     true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
     true_data.append('0b0')
@@ -939,6 +984,7 @@ def test_conditional_str():
 @raises(ValueError)
 def test_write_non_obj():
     b.write("piiiineapples!")
+
 
 def test_minimal_pylsdj_song():
     pulse_instrument = [
@@ -966,6 +1012,7 @@ def test_minimal_pylsdj_song():
 
     assert_equal(parsed_song.instruments[0].envelope, 0xa8)
 
+
 def test_read_and_write_prefix():
     lsdsng_preamble = [
         ("name", b.string(8)),
@@ -984,6 +1031,7 @@ def test_read_and_write_prefix():
 
     assert_equal(len(output_bytes), 9)
 
+
 def test_get_slice():
     data = bytearray([0x61, 0x62, 0x63, 0x64, 0x65, 0x66])
 
@@ -999,6 +1047,7 @@ def test_get_slice():
     assert_equal([b'c', b'd', b'e'], slice_test.arr[2:5])
     assert_equal([b'f', b'e', b'd'], slice_test.arr[5:2:-1])
     assert_equal([b'f', b'e', b'd'], slice_test.arr[:2:-1])
+
 
 def test_new():
     format_spec = [("greeting", b.string(5)),
