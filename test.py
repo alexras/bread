@@ -616,7 +616,6 @@ def test_str_unicode():
     edited_result = b.parse(output_data, str_test)
 
     assert_equal(result.msg, "abate")
-    assert_not_equal(edited_result, result)
 
 
 def test_enum():
