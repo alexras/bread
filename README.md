@@ -1,6 +1,6 @@
 # `bread` - Easier Binary Format Parsing
 
-[![Build Status](https://travis-ci.org/alexras/bread.svg?branch=master)](https://travis-ci.org/alexras/bread) [![Coverage Status](https://coveralls.io/repos/alexras/bread/badge.svg?branch=master)](https://coveralls.io/r/alexras/bread?branch=master) [![Documentation Status](https://readthedocs.io/projects/bread/badge/?version=latest)](https://readthedocs.io/projects/bread/?badge=latest)
+[![Build Status](https://travis-ci.org/alexras/bread.svg?branch=master)](https://travis-ci.org/alexras/bread) [![Coverage Status](https://coveralls.io/repos/alexras/bread/badge.svg?branch=master)](https://coveralls.io/r/alexras/bread?branch=master) [![Documentation Status](https://readthedocs.org/projects/bread/badge/?version=latest)](https://readthedocs.org/projects/bread/?badge=latest)
 
 
 ![](https://raw.github.com/alexras/bread/web/images/powdered-toast-man.jpg)
