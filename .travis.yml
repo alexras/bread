@@ -1,17 +1,27 @@
 language: python
 python:
-  - "2.7"
-  - "3.5"
-  - "3.6"
-  - "3.7-dev"
-  - "pypy3.5"
-
+- '2.7'
+- '3.5'
+- '3.6'
+- 3.7-dev
+- pypy3.5
 install:
-  - "pip install -r requirements.txt"
-  - "pip install -r test-requirements.txt"
-  - "pip install coveralls"
-
+- pip install -r requirements.txt
+- pip install -r test-requirements.txt
+- pip install coveralls
 script: make test
-
-after_success:
-  coveralls
+after_success: coveralls
+branches:
+  only:
+  - master
+  - "/v(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-(0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(\\.(0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(\\+[0-9a-zA-Z-]+(\\.[0-9a-zA-Z-]+)*)?/"
+before_deploy:
+- python setup.py sdist
+deploy:
+  provider: pypi
+  username: alexras
+  password:
+    secure: VQHutORDbe46E0DuswWKhEQT+TUuyGCySKEWsD2BodjVHW6XsyXQJV4HQIvtCi9KAgTfhOeukifLmVgLVXkwiJf820jmkeFDq89tvEBqDzpJvMANR58trm8q5H4ZkR9Tsb/tTESQcy8eEwz2VlDjF2I3Umf3ICwGCBNuFknrEK0=
+  skip_existing: true
+  on:
+    tags: true
