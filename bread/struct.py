@@ -170,10 +170,10 @@ class BreadConditional(object):
         return field
 
     def __init__(self, conditional_field_name, parent_struct):
+        self._name = None
+        self._conditions = {}
         self._parent_struct = parent_struct
         self._conditional_field_name = conditional_field_name
-        self._conditions = {}
-        self._name = None
 
     def _get_min_length(self):
         return min(map(lambda x: x._length, self._conditions.values()))
@@ -197,6 +197,9 @@ class BreadConditional(object):
     def __getattr__(self, attr):
         if attr == '_length':
             return self._conditions[self._get_condition()]._length
+
+        if attr in ('_name', '_conditions', '_parent_struct'):
+            return super(BreadConditional, self).__getattr__(attr)
 
         return getattr(self._conditions[self._get_condition()], attr)
 

@@ -503,6 +503,15 @@ def test_array_of_conditionals():
     assert_equal(test_parsed.foos[2].baz, 0b11)
     assert_equal(test_parsed._length, 32)
 
+def test_modifying_conditional_with_structs_that_have_different_lengths():
+    true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
+    true_data.append('0b0')
+
+    true_test = b.parse(true_data, conditional_test)
+
+    true_test.qux = False
+    assert_equal(true_test._length, 17)
+    assert_equal(true_test.fooz, 0b10010101)
 
 def test_field_properties_in_array():
     array_endian_test = [
