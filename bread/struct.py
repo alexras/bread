@@ -31,11 +31,19 @@ class BreadStruct(object):
         return not self.__eq__(other)
 
     def __len__(self):
-        return self._LENGTH
+        return self._compute_length()
 
-    @property
-    def _length(self):
-        return self._LENGTH
+    def _get_min_length(self):
+        total_length = 0
+
+        for field in self._field_list:
+            if isinstance(field, BreadConditional):
+                total_length += field._get_min_length()
+            else:
+                total_length += field._length
+
+        return total_length
+
 
     def _field_strings(self):
         field_strings = []
@@ -79,9 +87,7 @@ class BreadStruct(object):
         for name, field in list(self._fields.items()):
             setattr(self.__offsets__, name, field._offset)
 
-    # _LENGTH retained for backwards compatibility
-    @property
-    def _LENGTH(self):
+    def _compute_length(self):
         return sum([x._length for x in self._field_list])
 
     def get(self):
@@ -91,6 +97,9 @@ class BreadStruct(object):
         raise ValueError("Can't set a non-leaf struct to a value")
 
     def __getattr__(self, attr):
+        if attr in ('_LENGTH', '_length'):
+            return self._compute_length()
+
         if attr in self._fields:
             return self._fields[attr].get()
 
@@ -166,6 +175,9 @@ class BreadConditional(object):
         self._conditions = {}
         self._name = None
 
+    def _get_min_length(self):
+        return min(map(lambda x: x._length, self._conditions.values()))
+
     def _set_data(self, data_bits):
         for struct in list(self._conditions.values()):
             struct._set_data(data_bits)
@@ -183,6 +195,9 @@ class BreadConditional(object):
         return switch_value
 
     def __getattr__(self, attr):
+        if attr == '_length':
+            return self._conditions[self._get_condition()]._length
+
         return getattr(self._conditions[self._get_condition()], attr)
 
     def __setattr__(self, attr, value):
@@ -191,9 +206,6 @@ class BreadConditional(object):
         else:
             self._conditions[self._get_condition()].__setattr__(attr, value)
 
-    @property
-    def _length(self):
-        return list(self._conditions.values())[0]._length
 
     def as_native(self):
         return self._conditions[self._get_condition()].as_native()

@@ -345,14 +345,17 @@ def test_conditional():
 
     true_test = b.parse(true_data, conditional_test)
 
+    assert_equal(true_test._length, 13)
     assert_equal(true_test.qux, True)
     assert_true(hasattr(true_test, "frooz"))
     assert_false(hasattr(true_test, "fooz"))
     assert_equal(true_test.frooz, 0b1001)
     assert_equal(true_test.quxz, 0b01011101)
 
-    assert_equal(b.write(true_test, conditional_test),
-                 bytearray([0b11001010, 0b11101000, 0]))
+    written_bytes = b.write(true_test, conditional_test)
+    expected_bytes = bytearray([0b11001010, 0b11101000])
+
+    assert_equal(written_bytes, expected_bytes)
 
     false_data = bitstring.BitArray(
         bytearray([0b01001000, 0b10000000]))
@@ -360,14 +363,16 @@ def test_conditional():
 
     false_test = b.parse(false_data, conditional_test)
 
+    assert_equal(false_test._length, 17)
     assert_equal(false_test.qux, False)
     assert_true(hasattr(false_test, "fooz"))
     assert_false(hasattr(false_test, "frooz"))
     assert_equal(false_test.fooz, 0b10010001)
     assert_equal(false_test.barz, 1)
 
-    assert_equal(b.write(false_test, conditional_test),
-                 bytearray([0b01001000, 0b10000000, 0b10000000]))
+    written_bytes = b.write(false_test, conditional_test)
+    expected_bytes = bytearray([0b01001000, 0b10000000, 0b10000000])
+    assert_equal(written_bytes, expected_bytes)
 
 
 def test_conditional_as_native():
@@ -488,6 +493,7 @@ def test_array_of_conditionals():
     assert_equal(test_parsed.foos[0].foo, 0b1000)
     assert_equal(test_parsed.foos[1].foo, 0b0101)
     assert_equal(test_parsed.foos[2].foo, 0b1101)
+    assert_equal(test_parsed._length, 32)
 
     test_parsed.cond = 4
 
@@ -495,6 +501,7 @@ def test_array_of_conditionals():
     assert_equal(test_parsed.foos[0].baz, 0b10)
     assert_equal(test_parsed.foos[1].baz, 0b01)
     assert_equal(test_parsed.foos[2].baz, 0b11)
+    assert_equal(test_parsed._length, 32)
 
 
 def test_field_properties_in_array():

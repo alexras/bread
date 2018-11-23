@@ -13,14 +13,14 @@ def new(spec, type_name='bread_struct', data=None):
     if data is None:
         data = BitArray(bytearray(int(math.ceil(len(struct) / 8.0))))
 
-    if len(struct) > len(data):
+    struct._set_data(data)
+    struct._offset = 0
+
+    if struct._get_min_length() > len(data):
         raise ValueError(
             ("Data being parsed isn't long enough; expected at least %d "
              "bits, but data is only %d bits long") %
             (len(struct), len(data)))
-
-    struct._set_data(data[:len(struct)])
-    struct._offset = 0
 
     return struct
 
@@ -49,6 +49,6 @@ def write(parsed_obj, spec=None, filename=None):
 
     if filename is not None:
         with open(filename, 'wb') as fp:
-            parsed_obj._data_bits.tofile(fp)
+            parsed_obj._data_bits[:parsed_obj._length].tofile(fp)
     else:
-        return bytearray(parsed_obj._data_bits.tobytes())
+        return bytearray(parsed_obj._data_bits[:parsed_obj._length].tobytes())

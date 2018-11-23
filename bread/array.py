@@ -11,14 +11,19 @@ class BreadArray(object):
         self._num_items = num_items
         self.__offset = None
         self._name = None
-        self._item_length = None
+        self.__item_length = None
         self._accessor_items = [None] * self._num_items
         self._item_spec = item_spec
         self._parent = parent
         self._data_bits = None
         self._field_options = field_options
 
-        self._item_length = self._get_accessor_item(0)._length
+    @property
+    def _item_length(self):
+        if self.__item_length is None:
+            self.__item_length = self._get_accessor_item(0)._length
+
+        return self.__item_length
 
     @property
     def _offset(self):
@@ -28,10 +33,14 @@ class BreadArray(object):
     def _offset(self, offset):
         self.__offset = offset
 
-        cached_accessors = (i for i in self._accessor_items if i is not None)
+        current_offset = offset
 
-        for item in cached_accessors:
-            item._offset = offset
+        for i in range(self._num_items):
+            accessor = self._get_accessor_item(i)
+            accessor._offset = current_offset
+
+            current_offset += accessor._length
+
 
     def _create_accessor_item(self, index):
         if type(self._item_spec) == list:
@@ -41,12 +50,6 @@ class BreadArray(object):
             item = BreadConditional.from_spec(self._item_spec, self._parent)
         else:
             item = self._item_spec(self._parent, **(self._field_options))
-
-        if self._offset is not None:
-            item._offset = index * self._item_length + self._offset
-
-        if self._data_bits is not None:
-            item._set_data(self._data_bits)
 
         return item
 
@@ -147,10 +150,9 @@ class BreadArray(object):
     def _set_data(self, data_bits):
         self._data_bits = data_bits
 
-        cached_accessors = (i for i in self._accessor_items if i is not None)
-
-        for item in cached_accessors:
-            item._set_data(data_bits)
+        for i in range(self._num_items):
+            accessor = self._get_accessor_item(i)
+            accessor._set_data(data_bits)
 
 
 def array(length, substruct):
