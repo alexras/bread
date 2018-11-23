@@ -55,6 +55,7 @@ def intX(length, signed=False):
 
     return make_intX_field
 
+
 uint8 = intX(length=8, signed=False)
 byte = uint8
 uint16 = intX(length=16, signed=False)

@@ -64,7 +64,7 @@ class BreadArray(object):
 
         if self._num_items > 0:
             if type(self._item_spec) == list:
-                str_function = lambda x: '\n' + indent_text(str(x))
+                str_function = lambda x: '\n' + indent_text(str(x))  # noqa: E731
             else:
                 str_function = str
 

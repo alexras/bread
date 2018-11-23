@@ -1,0 +1,5 @@
+[flake8]
+
+max_line_length = 120
+ignore = E303,E401
+exclude = .git, node_modules, env, venv, build, 2venv, bread/__init__.py, bread/vendor
