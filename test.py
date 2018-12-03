@@ -1,11 +1,14 @@
 #!/usr/bin/env python
-import pytest
 
-import struct, sys, pprint, unittest, itertools, tempfile, os, json
-
-import bread as b
+import itertools
+import json
+import os
+import struct
+import tempfile
 
 import bitstring
+import bread as b
+import pytest
 
 # Shared structs for bread struct test
 
@@ -94,10 +97,10 @@ def test_simple_struct():
 
     assert len(test) == 168
 
-    assert test.flag_one == True
-    assert test.flag_two == False
-    assert test.flag_three == True
-    assert test.flag_four == False
+    assert test.flag_one
+    assert not test.flag_two
+    assert test.flag_three
+    assert not test.flag_four
     assert test.first == 0xfb
     assert test.blah == 0xdddd
 
@@ -169,10 +172,10 @@ def test_updates_do_not_leak():
 
     assert len(test2) == 168
 
-    assert test2.flag_one == False
-    assert test2.flag_two == False
-    assert test2.flag_three == False
-    assert test2.flag_four == True
+    assert not test2.flag_one
+    assert not test2.flag_two
+    assert not test2.flag_three
+    assert test2.flag_four
     assert test2.first == 0xde
     assert test2.blah == 0xfafe
 
@@ -182,10 +185,10 @@ def test_updates_do_not_leak():
 
     # Updating test2 shouldn't impact test
 
-    assert test.flag_one == True
-    assert test.flag_two == False
-    assert test.flag_three == True
-    assert test.flag_four == False
+    assert test.flag_one
+    assert not test.flag_two
+    assert test.flag_three
+    assert not test.flag_four
     assert test.first == 0xfb
     assert test.blah == 0xdddd
 
@@ -269,7 +272,7 @@ def test_nested_struct():
 
     assert supernested_test.__offsets__.dummy == current_byte * 8
     current_byte += 1
-    assert supernested_test.dummy.ok == False
+    assert not supernested_test.dummy.ok
 
     assert b.write(supernested_test, deeply_nested_struct) == bytearray(list(range(34)) + [0b0])
 
@@ -343,7 +346,7 @@ def test_conditional():
     true_test = b.parse(true_data, conditional_test)
 
     assert true_test._length == 13
-    assert true_test.qux == True
+    assert true_test.qux
     assert hasattr(true_test, "frooz")
     assert not hasattr(true_test, "fooz")
     assert true_test.frooz == 0b1001
@@ -361,7 +364,7 @@ def test_conditional():
     false_test = b.parse(false_data, conditional_test)
 
     assert false_test._length == 17
-    assert false_test.qux == False
+    assert not false_test.qux
     assert hasattr(false_test, "fooz")
     assert not hasattr(false_test, "frooz")
     assert false_test.fooz == 0b10010001
@@ -500,6 +503,7 @@ def test_array_of_conditionals():
     assert test_parsed.foos[2].baz == 0b11
     assert test_parsed._length == 32
 
+
 def test_modifying_conditional_with_structs_that_have_different_lengths():
     true_data = bitstring.BitArray(bytearray([0b11001010, 0b11101000]))
     true_data.append('0b0')
@@ -509,6 +513,7 @@ def test_modifying_conditional_with_structs_that_have_different_lengths():
     true_test.qux = False
     assert true_test._length == 17
     assert true_test.fooz == 0b10010101
+
 
 def test_field_properties_in_array():
     array_endian_test = [
@@ -600,7 +605,7 @@ def test_parse_str():
 
     test_parsed = b.parse(test_str, test_struct)
 
-    assert test_parsed.str.decode('utf-8') == "gabbagabbahey"
+    assert test_parsed.str == "gabbagabbahey"
 
 
 def test_str():
@@ -608,9 +613,11 @@ def test_str():
 
     data = bytearray([0x68, 0x65, 0x6c, 0x6c, 0x6f])
     result = b.parse(data, str_test)
-    assert result.msg.decode('utf-8') == "hello"
+    assert result.msg == "hello"
 
     assert b.write(result, str_test) == data
+
+    assert result.as_json() == json.dumps({'msg': 'hello'})
 
 
 def test_str_unicode():
@@ -619,7 +626,7 @@ def test_str_unicode():
     data = bytearray([104, 101, 108, 108, 111])
     result = b.parse(data, str_test)
 
-    assert result.msg.decode('utf-8') == "hello"
+    assert result.msg == "hello"
     assert b.write(result, str_test) == data
 
     result.msg = "abate"
@@ -628,7 +635,7 @@ def test_str_unicode():
 
     edited_result = b.parse(output_data, str_test)
 
-    assert result.msg == "abate"
+    assert edited_result.msg == "abate"
 
 
 def test_enum():
@@ -1068,7 +1075,7 @@ def test_new():
 
     assert len(empty_struct) == 8 * 5 + 4
 
-    assert empty_struct.greeting == b'\x00\x00\x00\x00\x00'
+    assert empty_struct.greeting == b'\x00\x00\x00\x00\x00'.decode('utf-8')
     assert empty_struct.age == 0
 
     empty_struct.greeting = 'hello'
