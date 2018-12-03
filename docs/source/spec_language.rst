@@ -47,7 +47,7 @@ For convenience and improved readability, the following shorthands are defined:
 Strings
 ~~~~~~~
 
-``string(length)`` - the next ``length`` bytes represent a string of the given length
+``string(length, encoding)`` - the next ``length`` bytes represent a string of the given length. You can pick an encoding for the strings to encode and decode in; the default is ``utf-8``.
 
 Booleans
 ~~~~~~~~
