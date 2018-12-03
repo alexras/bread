@@ -11,7 +11,7 @@ from .enum import *
 from .lifecycle import *
 
 __title__ = 'bread'
-__version__ = '2.3.0'
+__version__ = '3.0.0'
 __author__ = 'Alex Rasmussen'
 __license__ = 'MIT'
 __copyright__ = 'Copyright 2015 Alex Rasmussen'
