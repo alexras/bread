@@ -1068,10 +1068,18 @@ def test_get_slice():
 
 
 def test_new():
+    _test_new()
+
+
+def test_new_with_data():
+    _test_new(bytearray(8 * 5 + 4))
+
+
+def _test_new(data=None):
     format_spec = [("greeting", b.string(5)),
                    ("age", b.nibble)]
 
-    empty_struct = b.new(format_spec)
+    empty_struct = b.new(format_spec, data=data)
 
     assert len(empty_struct) == 8 * 5 + 4
 
