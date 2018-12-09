@@ -12,6 +12,8 @@ def new(spec, type_name='bread_struct', data=None):
 
     if data is None:
         data = BitArray(bytearray(int(math.ceil(len(struct) / 8.0))))
+    elif type(data) == bytearray:
+        data = BitArray(data)
 
     struct._set_data(data)
     struct._offset = 0
