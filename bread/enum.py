@@ -12,7 +12,7 @@ def enum(length, values, default=None):
 
         def encode_enum(key):
             if key not in keys:
-                raise ValueError('%s is not a valid enum value' % (key))
+                raise ValueError('%s is not a valid enum value; valid values %s' % (key, keys))
 
             return old_encode_fn(keys[key])
 
@@ -24,7 +24,7 @@ def enum(length, values, default=None):
                     return default
                 else:
                     raise ValueError(
-                        '%d is not a valid enum value' % (decoded_value))
+                        '%d is not a valid enum value; valid values %s' % (decoded_value, values))
 
             return values[decoded_value]
 
