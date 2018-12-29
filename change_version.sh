@@ -6,6 +6,15 @@ if [ "$#" -ne 1 ]; then
     exit 2
 fi
 
+if [[ ${version} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+then
+  echo "Version format is valid"
+else
+  echo "Version format invalid; must be of the form 'MAJOR.MINOR.PATCH'"
+  exit 1
+fi
+
+
 # Set version and build to version
 sed -i .bak -e "s/version = '.*'/version = '${version}'/g" docs/source/conf.py
 sed -i .bak -e "s/release = '.*'/release = '${version}'/g" docs/source/conf.py
@@ -19,4 +28,3 @@ find . -name "*.bak" -exec rm {} \;
 
 # Tag revision as this version in git
 git commit -a -m "Bumping version to ${git_tag}"
-git tag ${git_tag}
