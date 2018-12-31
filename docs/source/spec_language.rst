@@ -73,6 +73,22 @@ Here is an example of a 2-bit field representing a card suit: ::
          3: "clubs"
      }))
 
+If multiple bit sequences can represent the same value, you can use a ``tuple``
+or ``list`` of keys in the enum's specification, like so: ::
+
+    import bread as b
+    ('waveform', b.enum(8, {
+        0: 'triangle',
+        1: 'saw down',
+        2: 'saw up',
+        3: 'square',
+        4: 'sine',
+        (5, 7): 'sample and hold'
+    }))
+
+When constructing a new struct, if multiple bit sequences denote the same
+value, the first value in the tuple or list is used.
+
 Arrays
 ~~~~~~
 

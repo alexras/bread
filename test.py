@@ -689,6 +689,40 @@ def test_enum_default():
     assert result.suit == "spades"
 
 
+def test_enum_multiple_values_same_key():
+    enum_test = [
+        ('waveform', b.enum(8, {
+            0: 'triangle',
+            1: 'saw down',
+            2: 'saw up',
+            3: 'square',
+            4: 'sine',
+            (5, 7): 'sample and hold'
+        }))
+    ]
+
+    data = bytearray([7])
+    result = b.parse(data, enum_test)
+    assert result.waveform == 'sample and hold'
+
+    dumped = b.write(result, enum_test)
+    assert dumped == bytearray([7])
+
+    data = bytearray([5])
+    result = b.parse(data, enum_test)
+    assert result.waveform == 'sample and hold'
+
+    data = bytearray([2])
+    result = b.parse(data, enum_test)
+    assert result.waveform == 'saw up'
+
+    test_struct = b.new(enum_test)
+    test_struct.waveform = 'sample and hold'
+
+    dumped = b.write(test_struct, enum_test)
+    assert dumped == bytearray([5])
+
+
 def test_enum_set_invalid_value():
     with pytest.raises(ValueError):
         enum_test = [
